@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Search,
   ChevronRight,
@@ -13,13 +13,13 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import {
-  patients,
   type Patient,
   getWetnessColor,
   getWetnessBg,
   getBatteryColor,
   getRiskColor,
 } from '../data/mockData';
+import { getPatients } from '../services/api';
 
 function WetnessBar({ percent }: { percent: number }) {
   return (
@@ -63,7 +63,7 @@ function PatientDetailPanel({ patient, onClose }: { patient: Patient; onClose: (
       <div className="flex items-start justify-between mb-6">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-teal-600 flex items-center justify-center text-white text-xl font-extrabold shadow-lg">
-            {patient.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+            {patient.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
           </div>
           <div>
             <h3 className="text-lg font-bold text-gray-900">{patient.name}</h3>
@@ -167,13 +167,75 @@ function PatientDetailPanel({ patient, onClose }: { patient: Patient; onClose: (
 }
 
 export default function PatientsPage() {
+  const [patientsList, setPatientsList] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [search, setSearch] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [sortKey, setSortKey] = useState<keyof Patient>('riskScore');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [filterStatus, setFilterStatus] = useState<string>('All');
 
-  const filtered = patients
+  const loadPatients = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getPatients();
+      setPatientsList(data);
+      // Sync selected patient with new data if open
+      if (selectedPatient) {
+        const updated = data.find(p => p.id === selectedPatient.id);
+        if (updated) setSelectedPatient(updated);
+      }
+    } catch (err: any) {
+      console.error('Error loading patients:', err);
+      setError(err?.message || 'Failed to fetch patients telemetry records.');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedPatient]);
+
+  useEffect(() => {
+    loadPatients();
+  }, []);
+
+  const handleSort = (key: keyof Patient) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('desc'); }
+  };
+
+  const SortIcon = ({ field }: { field: keyof Patient }) =>
+    sortKey === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕';
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <p className="text-gray-500 font-medium animate-pulse">Loading patient status details...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-6 bg-red-50 border border-red-100 rounded-2xl space-y-4 max-w-md mx-auto mt-12 animate-in">
+        <div className="p-3 bg-red-100 rounded-full text-red-600">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
+        <h3 className="text-lg font-bold text-gray-900">Failed to load patients</h3>
+        <p className="text-sm text-red-700 text-center">{error}</p>
+        <button
+          onClick={loadPatients}
+          className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 active:scale-95 transition-all shadow-md"
+        >
+          Retry Connection
+        </button>
+      </div>
+    );
+  }
+
+  const filtered = patientsList
     .filter(p => {
       const matchesSearch =
         p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -193,21 +255,13 @@ export default function PatientsPage() {
         : String(bVal).localeCompare(String(aVal));
     });
 
-  const handleSort = (key: keyof Patient) => {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(key); setSortDir('desc'); }
-  };
-
-  const SortIcon = ({ field }: { field: keyof Patient }) =>
-    sortKey === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕';
-
   return (
     <div className="space-y-5 animate-in">
       {/* Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="section-title">Patient Management</h2>
-          <p className="section-subtitle">{patients.length} patients · All wards</p>
+          <p className="section-subtitle">{patientsList.length} patients · All wards</p>
         </div>
 
         {/* Filters */}
@@ -277,7 +331,7 @@ export default function PatientsPage() {
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-400 to-teal-500 flex items-center justify-center text-white text-xs font-extrabold shrink-0">
-                          {patient.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                          {patient.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-gray-900">{patient.name}</p>
@@ -320,7 +374,7 @@ export default function PatientsPage() {
           </div>
           <div className="px-5 py-3 border-t border-gray-50 bg-gray-50">
             <p className="text-xs text-gray-400">
-              Showing {filtered.length} of {patients.length} patients
+              Showing {filtered.length} of {patientsList.length} patients
             </p>
           </div>
         </div>

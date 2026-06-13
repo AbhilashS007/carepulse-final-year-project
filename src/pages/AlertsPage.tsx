@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   AlertTriangle,
   Bell,
@@ -11,7 +11,8 @@ import {
   Droplets,
   X,
 } from 'lucide-react';
-import { alerts, type Alert, getSeverityColor, formatTimestamp } from '../data/mockData';
+import { type Alert, getSeverityColor, formatTimestamp } from '../data/mockData';
+import { getAlerts } from '../services/api';
 
 function AlertTypeIcon({ type }: { type: Alert['type'] }) {
   const iconMap = {
@@ -84,15 +85,64 @@ function AlertCard({ alert }: { alert: Alert }) {
 }
 
 export default function AlertsPage() {
+  const [alertsList, setAlertsList] = useState<Alert[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [search, setSearch] = useState('');
   const [filterSeverity, setFilterSeverity] = useState<string>('All');
   const [filterType, setFilterType] = useState<string>('All');
   const [showResolved, setShowResolved] = useState(true);
 
-  const activeAlerts = alerts.filter(a => !a.resolved);
-  const resolvedAlerts = alerts.filter(a => a.resolved);
+  const loadAlerts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getAlerts();
+      setAlertsList(data);
+    } catch (err: any) {
+      console.error('Error loading alerts:', err);
+      setError(err?.message || 'Failed to connect to the alerts database service.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const filteredAlerts = alerts.filter(a => {
+  useEffect(() => {
+    loadAlerts();
+  }, [loadAlerts]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <p className="text-gray-500 font-medium animate-pulse">Loading active alerts and history...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-6 bg-red-50 border border-red-100 rounded-2xl space-y-4 max-w-md mx-auto mt-12 animate-in">
+        <div className="p-3 bg-red-100 rounded-full text-red-600">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
+        <h3 className="text-lg font-bold text-gray-900">Failed to load Alert Center</h3>
+        <p className="text-sm text-red-700 text-center">{error}</p>
+        <button
+          onClick={loadAlerts}
+          className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 active:scale-95 transition-all shadow-md"
+        >
+          Retry Connection
+        </button>
+      </div>
+    );
+  }
+
+  const activeAlerts = alertsList.filter(a => !a.resolved);
+  const resolvedAlerts = alertsList.filter(a => a.resolved);
+
+  const filteredAlerts = alertsList.filter(a => {
     const matchesSearch = a.patientName.toLowerCase().includes(search.toLowerCase()) ||
       a.message.toLowerCase().includes(search.toLowerCase());
     const matchesSeverity = filterSeverity === 'All' || a.severity === filterSeverity;
@@ -236,7 +286,7 @@ export default function AlertsPage() {
         </div>
 
         <div className="mt-4 pt-4 border-t border-gray-50 text-xs text-gray-400 text-center">
-          Showing {filteredAlerts.length} of {alerts.length} total alerts
+          Showing {filteredAlerts.length} of {alertsList.length} total alerts
         </div>
       </div>
     </div>

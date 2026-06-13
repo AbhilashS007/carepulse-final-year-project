@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from 'react';
 import {
   AreaChart,
   Area,
@@ -22,8 +23,14 @@ import {
   Users,
   ArrowUp,
   ArrowDown,
+  AlertTriangle,
 } from 'lucide-react';
-import { wetnessTrend, dailyFrequency, weeklyAnalytics } from '../data/mockData';
+import { weeklyAnalytics } from '../data/mockData';
+import {
+  getWetnessTrend,
+  getUrinationFrequency,
+  getDashboardStats,
+} from '../services/api';
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -43,46 +50,103 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const statCards = [
-  {
-    label: 'Avg. Wetness Level',
-    value: '48%',
-    sub: 'Across all patients today',
-    trend: '+5%',
-    trendUp: true,
-    icon: Droplets,
-    color: 'from-blue-500 to-blue-700',
-  },
-  {
-    label: 'Daily Event Count',
-    value: '47',
-    sub: 'Total urination events today',
-    trend: '+4.4%',
-    trendUp: true,
-    icon: Activity,
-    color: 'from-teal-500 to-cyan-600',
-  },
-  {
-    label: 'Avg. Interval',
-    value: '2.4 hrs',
-    sub: 'Between urination events',
-    trend: '-0.2h',
-    trendUp: false,
-    icon: Clock,
-    color: 'from-purple-500 to-indigo-600',
-  },
-  {
-    label: 'Monitored Patients',
-    value: '12',
-    sub: 'Data collected this week',
-    trend: 'Stable',
-    trendUp: true,
-    icon: Users,
-    color: 'from-green-500 to-emerald-600',
-  },
-];
-
 export default function AnalyticsPage() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [trendData, setTrendData] = useState<any[]>([]);
+  const [frequencyData, setFrequencyData] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
+
+  const loadAnalytics = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [trend, freq, statsData] = await Promise.all([
+        getWetnessTrend(),
+        getUrinationFrequency(),
+        getDashboardStats(),
+      ]);
+      setTrendData(trend);
+      setFrequencyData(freq);
+      setStats(statsData);
+    } catch (err: any) {
+      console.error('Error loading analytics:', err);
+      setError(err?.message || 'Failed to connect to the CarePulse analytics service.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAnalytics();
+  }, [loadAnalytics]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <p className="text-gray-500 font-medium animate-pulse">Analyzing sensor history and patterns...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-6 bg-red-50 border border-red-100 rounded-2xl space-y-4 max-w-md mx-auto mt-12 animate-in">
+        <div className="p-3 bg-red-100 rounded-full text-red-600">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
+        <h3 className="text-lg font-bold text-gray-900">Failed to load Analytics</h3>
+        <p className="text-sm text-red-700 text-center">{error}</p>
+        <button
+          onClick={loadAnalytics}
+          className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 active:scale-95 transition-all shadow-md"
+        >
+          Retry Connection
+        </button>
+      </div>
+    );
+  }
+
+  const statCards = [
+    {
+      label: 'Avg. Wetness Level',
+      value: '48%',
+      sub: 'Across all patients today',
+      trend: '+5%',
+      trendUp: true,
+      icon: Droplets,
+      color: 'from-blue-500 to-blue-700',
+    },
+    {
+      label: 'Daily Event Count',
+      value: stats ? String(stats.todayEvents) : '47',
+      sub: 'Total urination events today',
+      trend: '+4.4%',
+      trendUp: true,
+      icon: Activity,
+      color: 'from-teal-500 to-cyan-600',
+    },
+    {
+      label: 'Avg. Interval',
+      value: '2.4 hrs',
+      sub: 'Between urination events',
+      trend: '-0.2h',
+      trendUp: false,
+      icon: Clock,
+      color: 'from-purple-500 to-indigo-600',
+    },
+    {
+      label: 'Monitored Patients',
+      value: stats ? String(stats.totalPatients) : '12',
+      sub: 'Data collected this week',
+      trend: 'Stable',
+      trendUp: true,
+      icon: Users,
+      color: 'from-green-500 to-emerald-600',
+    },
+  ];
+
   return (
     <div className="space-y-6 animate-in">
       {/* Header */}
@@ -130,7 +194,7 @@ export default function AnalyticsPage() {
           </div>
         </div>
         <ResponsiveContainer width="100%" height={280}>
-          <AreaChart data={wetnessTrend}>
+          <AreaChart data={trendData}>
             <defs>
               <linearGradient id="wetnessAreaGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#2563eb" stopOpacity={0.2} />
@@ -189,7 +253,7 @@ export default function AnalyticsPage() {
             <BarChart3 className="w-5 h-5 text-gray-300" />
           </div>
           <ResponsiveContainer width="100%" height={230}>
-            <BarChart data={dailyFrequency} barGap={4}>
+            <BarChart data={frequencyData} barGap={4}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
               <XAxis
                 dataKey="day"

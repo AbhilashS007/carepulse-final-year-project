@@ -13,8 +13,9 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { useState } from 'react';
-import { aiInsights, type AIInsight, getRiskColor } from '../data/mockData';
+import { useState, useEffect, useCallback } from 'react';
+import { type AIInsight, getRiskColor } from '../data/mockData';
+import { getAIInsights } from '../services/api';
 
 function RiskGauge({ score }: { score: number }) {
   const clampedScore = Math.max(0, Math.min(100, score));
@@ -87,7 +88,7 @@ function InsightCard({ insight }: { insight: AIInsight }) {
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-500 to-teal-600 flex items-center justify-center text-white text-sm font-extrabold shadow-lg">
-            {insight.patientName.split(' ').map(n => n[0]).join('').slice(0, 2)}
+            {insight.patientName.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
           </div>
           <div>
             <h3 className="font-bold text-gray-900">{insight.patientName}</h3>
@@ -181,16 +182,64 @@ function InsightCard({ insight }: { insight: AIInsight }) {
 }
 
 export default function AIInsightsPage() {
+  const [insightsList, setInsightsList] = useState<AIInsight[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'risk' | 'trend'>('risk');
 
-  const sorted = [...aiInsights].sort((a, b) => {
+  const loadInsights = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getAIInsights();
+      setInsightsList(data);
+    } catch (err: any) {
+      console.error('Error loading insights:', err);
+      setError(err?.message || 'Failed to connect to the CarePulse AI Insight services.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadInsights();
+  }, [loadInsights]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <p className="text-gray-500 font-medium animate-pulse">Consulting AI diagnostics engine...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-6 bg-red-50 border border-red-100 rounded-2xl space-y-4 max-w-md mx-auto mt-12 animate-in">
+        <div className="p-3 bg-red-100 rounded-full text-red-600">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
+        <h3 className="text-lg font-bold text-gray-900">Failed to load AI Insights</h3>
+        <p className="text-sm text-red-700 text-center">{error}</p>
+        <button
+          onClick={loadInsights}
+          className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 active:scale-95 transition-all shadow-md"
+        >
+          Retry Connection
+        </button>
+      </div>
+    );
+  }
+
+  const sorted = [...insightsList].sort((a, b) => {
     if (sortBy === 'risk') return b.riskScore - a.riskScore;
     return b.trendPercent - a.trendPercent;
   });
 
-  const avgRisk = Math.round(aiInsights.reduce((s, i) => s + i.riskScore, 0) / aiInsights.length);
-  const criticalCount = aiInsights.filter(i => i.riskLevel === 'Critical').length;
-  const improvingCount = aiInsights.filter(i => i.trendDirection === 'down').length;
+  const avgRisk = insightsList.length > 0 ? Math.round(insightsList.reduce((s, i) => s + i.riskScore, 0) / insightsList.length) : 0;
+  const criticalCount = insightsList.filter(i => i.riskLevel === 'Critical').length;
+  const improvingCount = insightsList.filter(i => i.trendDirection === 'down').length;
 
   return (
     <div className="space-y-6 animate-in">
@@ -242,7 +291,7 @@ export default function AIInsightsPage() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Patients Analyzed', value: aiInsights.length, icon: <CheckCircle2 className="w-4 h-4 text-green-500" /> },
+            { label: 'Patients Analyzed', value: insightsList.length, icon: <CheckCircle2 className="w-4 h-4 text-green-500" /> },
             { label: 'Avg. Risk Score', value: `${avgRisk}/100`, icon: <AlertTriangle className="w-4 h-4 text-amber-500" /> },
             { label: 'Critical Cases', value: criticalCount, icon: <ArrowUp className="w-4 h-4 text-red-500" /> },
             { label: 'Improving', value: improvingCount, icon: <ArrowDown className="w-4 h-4 text-green-500" /> },

@@ -23,66 +23,19 @@ import {
   YAxis,
   CartesianGrid,
 } from 'recharts';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  patients,
-  alerts,
-  dashboardStats,
-  wetnessTrend,
   getWetnessColor,
   getWetnessBg,
   getBatteryColor,
   getSeverityColor,
 } from '../data/mockData';
-
-const WETNESS_PIE = [
-  { name: 'Dry', value: dashboardStats.wetnessDistribution.dry, color: '#10b981' },
-  { name: 'Slightly Wet', value: dashboardStats.wetnessDistribution.slightlyWet, color: '#f59e0b' },
-  { name: 'Moderately Wet', value: dashboardStats.wetnessDistribution.moderatelyWet, color: '#f97316' },
-  { name: 'Saturated', value: dashboardStats.wetnessDistribution.saturated, color: '#ef4444' },
-];
-
-const kpiCards = [
-  {
-    label: 'Total Patients',
-    value: dashboardStats.totalPatients,
-    icon: Users,
-    iconBg: 'from-blue-500 to-blue-600',
-    trend: '+2 this month',
-    trendUp: true,
-    description: 'Currently monitored',
-  },
-  {
-    label: 'Active Alerts',
-    value: dashboardStats.activeAlerts,
-    icon: Bell,
-    iconBg: 'from-red-500 to-rose-600',
-    trend: '3 critical, 2 warnings',
-    trendUp: false,
-    description: 'Require attention',
-  },
-  {
-    label: 'Connected Devices',
-    value: dashboardStats.connectedDevices,
-    icon: Wifi,
-    iconBg: 'from-green-500 to-emerald-600',
-    trend: '10/12 online',
-    trendUp: true,
-    description: 'IoT sensors active',
-  },
-  {
-    label: "Today's Events",
-    value: dashboardStats.todayEvents,
-    icon: Activity,
-    iconBg: 'from-teal-500 to-cyan-600',
-    trend: '+4.4% vs yesterday',
-    trendUp: true,
-    description: 'Urination events logged',
-  },
-];
-
-const recentAlerts = alerts.filter(a => !a.resolved).slice(0, 5);
-const topPatients = patients.slice(0, 6);
-const trendData = wetnessTrend.slice(-16);
+import {
+  getDashboardStats,
+  getPatients,
+  getAlerts,
+  getWetnessTrend,
+} from '../services/api';
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -97,6 +50,117 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function DashboardPage() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<any>(null);
+  const [patientsList, setPatientsList] = useState<any[]>([]);
+  const [alertsList, setAlertsList] = useState<any[]>([]);
+  const [trendList, setTrendList] = useState<any[]>([]);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [statsData, patientsData, alertsData, trendData] = await Promise.all([
+        getDashboardStats(),
+        getPatients(),
+        getAlerts(),
+        getWetnessTrend(),
+      ]);
+      setStats(statsData);
+      setPatientsList(patientsData);
+      setAlertsList(alertsData);
+      setTrendList(trendData);
+    } catch (err: any) {
+      console.error('Error loading dashboard data:', err);
+      setError(err?.message || 'Unable to connect to the CarePulse API server. Please make sure the backend is running.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <p className="text-gray-500 font-medium animate-pulse">Loading dashboard telemetry...</p>
+      </div>
+    );
+  }
+
+  if (error || !stats) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-6 bg-red-50 border border-red-100 rounded-2xl space-y-4 max-w-md mx-auto mt-12 animate-in">
+        <div className="p-3 bg-red-100 rounded-full text-red-600">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
+        <h3 className="text-lg font-bold text-gray-900">Failed to load data</h3>
+        <p className="text-sm text-red-700 text-center">{error}</p>
+        <button
+          onClick={loadData}
+          className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 active:scale-95 transition-all shadow-md"
+        >
+          Retry Connection
+        </button>
+      </div>
+    );
+  }
+
+  const WETNESS_PIE = [
+    { name: 'Dry', value: stats.wetnessDistribution.dry, color: '#10b981' },
+    { name: 'Slightly Wet', value: stats.wetnessDistribution.slightlyWet, color: '#f59e0b' },
+    { name: 'Moderately Wet', value: stats.wetnessDistribution.moderatelyWet, color: '#f97316' },
+    { name: 'Saturated', value: stats.wetnessDistribution.saturated, color: '#ef4444' },
+  ];
+
+  const kpiCards = [
+    {
+      label: 'Total Patients',
+      value: stats.totalPatients,
+      icon: Users,
+      iconBg: 'from-blue-500 to-blue-600',
+      trend: '+2 this month',
+      trendUp: true,
+      description: 'Currently monitored',
+    },
+    {
+      label: 'Active Alerts',
+      value: stats.activeAlerts,
+      icon: Bell,
+      iconBg: 'from-red-500 to-rose-600',
+      trend: `${alertsList.filter(a => !a.resolved && a.severity === 'Critical').length} critical, ${alertsList.filter(a => !a.resolved && a.severity === 'Warning').length} warnings`,
+      trendUp: false,
+      description: 'Require attention',
+    },
+    {
+      label: 'Connected Devices',
+      value: stats.connectedDevices,
+      icon: Wifi,
+      iconBg: 'from-green-500 to-emerald-600',
+      trend: `${stats.deviceHealth.online}/${stats.totalPatients} online`,
+      trendUp: true,
+      description: 'IoT sensors active',
+    },
+    {
+      label: "Today's Events",
+      value: stats.todayEvents,
+      icon: Activity,
+      iconBg: 'from-teal-500 to-cyan-600',
+      trend: '+4.4% vs yesterday',
+      trendUp: true,
+      description: 'Urination events logged',
+    },
+  ];
+
+  const recentAlerts = alertsList.filter(a => !a.resolved).slice(0, 5);
+  // Sort patients by risk score descending for the list
+  const topPatients = [...patientsList].sort((a, b) => b.riskScore - a.riskScore).slice(0, 6);
+  const trendData = trendList.slice(-16);
+
   return (
     <div className="space-y-6 animate-in">
       {/* ───── KPI Cards ───── */}
@@ -197,7 +261,7 @@ export default function DashboardPage() {
         <div className="cp-card p-6">
           <div className="mb-5">
             <h3 className="font-bold text-gray-900">Wetness Status</h3>
-            <p className="text-xs text-gray-400 mt-0.5">All 12 patients · Now</p>
+            <p className="text-xs text-gray-400 mt-0.5">All {stats.totalPatients} patients · Now</p>
           </div>
           <ResponsiveContainer width="100%" height={160}>
             <PieChart>
@@ -244,30 +308,34 @@ export default function DashboardPage() {
             <span className="cp-badge-danger">{recentAlerts.length} active</span>
           </div>
           <div className="space-y-3">
-            {recentAlerts.map(alert => (
-              <div
-                key={alert.id}
-                className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-gray-200 transition-colors"
-              >
-                <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                  alert.severity === 'Critical' ? 'bg-red-500' :
-                  alert.severity === 'Warning' ? 'bg-amber-400' : 'bg-blue-400'
-                }`} />
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-gray-800 truncate">{alert.patientName}</p>
-                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{alert.message}</p>
-                  <div className="flex items-center gap-1 mt-1.5">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getSeverityColor(alert.severity)}`}>
-                      {alert.severity}
-                    </span>
-                    <span className="text-xs text-gray-400">·</span>
-                    <span className="text-xs text-gray-400">
-                      {new Date(alert.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+            {recentAlerts.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-8">No active alerts</p>
+            ) : (
+              recentAlerts.map(alert => (
+                <div
+                  key={alert.id}
+                  className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100 hover:border-gray-200 transition-colors"
+                >
+                  <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                    alert.severity === 'Critical' ? 'bg-red-500' :
+                    alert.severity === 'Warning' ? 'bg-amber-400' : 'bg-blue-400'
+                  }`} />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-gray-800 truncate">{alert.patientName}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{alert.message}</p>
+                    <div className="flex items-center gap-1 mt-1.5">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getSeverityColor(alert.severity)}`}>
+                        {alert.severity}
+                      </span>
+                      <span className="text-xs text-gray-400">·</span>
+                      <span className="text-xs text-gray-400">
+                        {new Date(alert.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
@@ -283,7 +351,7 @@ export default function DashboardPage() {
             {topPatients.map(p => (
               <div key={p.id} className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-400 to-teal-500 flex items-center justify-center text-white text-xs font-extrabold shrink-0">
-                  {p.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  {p.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p>
@@ -317,16 +385,16 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-5">
             <div>
               <h3 className="font-bold text-gray-900">Device Health</h3>
-              <p className="text-xs text-gray-400 mt-0.5">All 12 IoT sensors</p>
+              <p className="text-xs text-gray-400 mt-0.5">All {stats.totalPatients} IoT sensors</p>
             </div>
           </div>
 
           {/* Status counts */}
           <div className="grid grid-cols-3 gap-3 mb-5">
             {[
-              { label: 'Online', value: 10, color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
-              { label: 'Offline', value: 1, color: 'bg-red-100 text-red-700', icon: AlertTriangle },
-              { label: 'Maint.', value: 1, color: 'bg-amber-100 text-amber-700', icon: Clock },
+              { label: 'Online', value: stats.deviceHealth.online, color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
+              { label: 'Offline', value: stats.deviceHealth.offline, color: 'bg-red-100 text-red-700', icon: AlertTriangle },
+              { label: 'Maint.', value: stats.deviceHealth.maintenance, color: 'bg-amber-100 text-amber-700', icon: Clock },
             ].map(({ label, value, color, icon: Icon }) => (
               <div key={label} className={`rounded-xl p-3 text-center ${color}`}>
                 <Icon className="w-4 h-4 mx-auto mb-1" />
@@ -338,7 +406,7 @@ export default function DashboardPage() {
 
           {/* Device list */}
           <div className="space-y-2">
-            {patients.slice(0, 6).map(p => (
+            {patientsList.slice(0, 6).map(p => (
               <div key={p.id} className="flex items-center justify-between py-1.5">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${
