@@ -1,0 +1,25 @@
+# ============================================================
+# CarePulse Backend — Phase 1 Dependencies
+# ============================================================
+
+# Web framework
+fastapi==0.115.5
+
+# ASGI server
+uvicorn[standard]==0.32.0
+
+# ORM + database driver
+SQLAlchemy==2.0.36
+
+# SQLite is built into Python — no extra driver needed.
+# Uncomment the line below when migrating to MySQL:
+# PyMySQL==1.1.1
+
+# Data validation (Pydantic v2)
+pydantic==2.10.3
+
+# Environment variable management
+python-dotenv==1.0.1
+
+# HTTP utilities (used by FastAPI)
+httpx==0.28.0
