@@ -1,11 +1,22 @@
-import { Bell, User, ChevronDown, Search, Wifi } from 'lucide-react';
+import { Bell, User, ChevronDown, Search, Wifi, LogOut } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { alerts } from '../../data/mockData';
+import { getCurrentUser, logout } from '../../services/authService';
 
 const unresolved = alerts.filter(a => !a.resolved);
 
 export default function TopBar({ title }: { title: string }) {
+  const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  const currentUser = getCurrentUser();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-6 sticky top-0 z-30 shadow-sm">
@@ -85,16 +96,45 @@ export default function TopBar({ title }: { title: string }) {
         </div>
 
         {/* User Profile */}
-        <button className="flex items-center gap-2.5 pl-3 pr-1 py-1 rounded-xl hover:bg-gray-50 border border-gray-200 transition-colors">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-teal-600 flex items-center justify-center">
-            <User className="w-4 h-4 text-white" />
-          </div>
-          <div className="hidden md:block text-left">
-            <p className="text-xs font-semibold text-gray-900 leading-none">Dr. Admin</p>
-            <p className="text-xs text-gray-400 mt-0.5">Head of Geriatrics</p>
-          </div>
-          <ChevronDown className="w-4 h-4 text-gray-400" />
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
+            className="flex items-center gap-2.5 pl-3 pr-1.5 py-1 rounded-xl hover:bg-gray-50 border border-gray-200 transition-colors"
+          >
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-teal-600 flex items-center justify-center">
+              <User className="w-4 h-4 text-white" />
+            </div>
+            <div className="hidden md:block text-left">
+              <p className="text-xs font-semibold text-gray-900 leading-none">
+                {currentUser ? currentUser.full_name : 'Guest User'}
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5 capitalize">
+                {currentUser ? currentUser.role : 'Guest'}
+              </p>
+            </div>
+            <ChevronDown className="w-4 h-4 text-gray-400" />
+          </button>
+
+          {showProfileMenu && (
+            <div className="absolute right-0 top-12 w-48 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden py-1.5 animate-in">
+              <div className="px-4 py-2 border-b border-gray-50 md:hidden">
+                <p className="text-xs font-bold text-gray-900 truncate">
+                  {currentUser ? currentUser.full_name : 'Guest User'}
+                </p>
+                <p className="text-xs text-gray-400 capitalize">
+                  {currentUser ? currentUser.role : 'Guest'}
+                </p>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="w-full text-left px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

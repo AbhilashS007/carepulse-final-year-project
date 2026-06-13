@@ -6,6 +6,45 @@ const api = axios.create({
   timeout: 10000,
 });
 
+// Add request interceptor to automatically attach the JWT access token
+api.interceptors.request.use(
+  (config) => {
+    try {
+      const token = localStorage.getItem('carepulse_token');
+      if (token && token !== 'undefined' && token !== 'null') {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (e) {
+      console.error('Error reading token inside api.ts request interceptor:', e);
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor to handle session expiration or unauthorized requests
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      try {
+        localStorage.removeItem('carepulse_token');
+        localStorage.removeItem('carepulse_user');
+      } catch (e) {
+        console.error('Error removing token inside api.ts response interceptor:', e);
+      }
+      // Redirect to login page if currently on a protected route
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Helpers to classify and format fields
 const classifyWetness = (percent: number): 'Dry' | 'Slightly Wet' | 'Moderately Wet' | 'Saturated' => {
   if (percent <= 30) return 'Dry';

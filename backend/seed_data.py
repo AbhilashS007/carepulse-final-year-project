@@ -590,7 +590,43 @@ def seed() -> None:
             insight_count += 1
         print(f"  ✓ {insight_count} AI insights inserted.")
 
-        # ── Step 7: Commit everything ──────────────────────────
+        # ── Step 7: Seed Users ─────────────────────────────────
+        print("\nSeeding 2 users (if they don't exist)...")
+        from app.models import User
+        from app.security import get_password_hash
+        
+        users_to_seed = [
+            {
+                "full_name": "System Administrator",
+                "email": "admin@carepulse.com",
+                "password": "admin123",
+                "role": "admin"
+            },
+            {
+                "full_name": "Caregiver User",
+                "email": "caregiver@carepulse.com",
+                "password": "care123",
+                "role": "caregiver"
+            }
+        ]
+        
+        seeded_users_count = 0
+        for u_data in users_to_seed:
+            existing_user = db.query(User).filter(User.email == u_data["email"]).first()
+            if not existing_user:
+                hashed_password = get_password_hash(u_data["password"])
+                user = User(
+                    full_name=u_data["full_name"],
+                    email=u_data["email"],
+                    password_hash=hashed_password,
+                    role=u_data["role"]
+                )
+                db.add(user)
+                seeded_users_count += 1
+                
+        print(f"  ✓ {seeded_users_count} users seeded successfully.")
+
+        # ── Step 8: Commit everything ──────────────────────────
         db.commit()
         print("\n" + "=" * 40)
         print("✅ Seed complete! carepulse.db is ready.")

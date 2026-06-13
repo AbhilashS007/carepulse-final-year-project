@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import patients, alerts, analytics, ai_insights
+from app.routers import patients, alerts, analytics, ai_insights, auth
 
 # Create FastAPI application
 app = FastAPI(
@@ -31,6 +31,7 @@ app.add_middleware(
 )
 
 # ── Register Routers ──────────────────────────────────────────
+app.include_router(auth.router)
 app.include_router(patients.router)
 app.include_router(alerts.router)
 app.include_router(analytics.router)

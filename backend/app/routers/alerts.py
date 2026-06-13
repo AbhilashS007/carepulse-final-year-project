@@ -4,6 +4,8 @@ from typing import List, Optional
 
 from app.database import get_db
 from app import crud, schemas
+from app.models import User
+from app.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/alerts",
@@ -17,11 +19,13 @@ def read_alerts(
     alert_type: Optional[str] = Query(None, description="Filter by alert type (high_wetness, low_battery, device_offline, diaper_changed, check_required)"),
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Retrieve a list of alerts, with optional filters.
     Unresolved alerts are returned first, sorted by most recent first.
+    Requires authentication.
     """
     alerts = crud.get_all_alerts(
         db,

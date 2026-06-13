@@ -4,6 +4,8 @@ from typing import List
 
 from app.database import get_db
 from app import crud, schemas
+from app.models import User
+from app.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/patients",
@@ -11,19 +13,30 @@ router = APIRouter(
 )
 
 @router.get("", response_model=List[schemas.PatientSummaryOut])
-def read_patients(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_patients(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Retrieve a list of patients.
     Returns lightweight summary information for list/table display.
+    Requires authentication.
     """
     patients = crud.get_all_patients(db, skip=skip, limit=limit)
     return patients
 
 @router.get("/{patient_id}", response_model=schemas.PatientOut)
-def read_patient(patient_id: int, db: Session = Depends(get_db)):
+def read_patient(
+    patient_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Retrieve details for a specific patient, including nested relationships:
     alerts, urination events, and AI insights.
+    Requires authentication.
     """
     patient = crud.get_patient_by_id(db, patient_id=patient_id)
     if patient is None:
