@@ -353,3 +353,33 @@ class AIInsight(Base):
             f"patient_id={self.patient_id} "
             f"risk={self.risk_score} risk_level={self.risk_level!r}>"
         )
+
+
+# ================================================================
+# TABLE 5: users
+# ================================================================
+
+class User(Base):
+    """
+    Represents a system user (Administrator or Caregiver)
+    who can access protected monitoring dashboards and actions.
+    """
+
+    __tablename__ = "users"
+
+    # Primary key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    # User details
+    full_name:     Mapped[str] = mapped_column(String(100), nullable=False)
+    email:         Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role:          Mapped[str] = mapped_column(String(50), nullable=False)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<User id={self.id} email={self.email!r} role={self.role!r}>"

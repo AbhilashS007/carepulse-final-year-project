@@ -326,6 +326,42 @@ class DailyEventCount(_Base):
     event_count: int
 
 
+# ================================================================
+# USER & AUTH SCHEMAS
+# ================================================================
+
+class UserBase(_Base):
+    full_name: str = Field(..., min_length=2, max_length=100, example="System Administrator")
+    email:     str = Field(..., min_length=5, max_length=100, example="admin@carepulse.com")
+    role:      str = Field(..., min_length=2, max_length=50, example="admin")
+
+
+class UserCreate(UserBase):
+    password:  str = Field(..., min_length=6, max_length=100, example="admin123")
+
+
+class UserOut(UserBase):
+    id:         int
+    created_at: datetime
+
+
+class UserLogin(_Base):
+    email:    str = Field(..., example="admin@carepulse.com")
+    password: str = Field(..., example="admin123")
+
+
+class Token(_Base):
+    access_token: str
+    token_type:   str = "bearer"
+    user:         UserOut
+
+
+class TokenData(_Base):
+    email:   Optional[str] = None
+    role:    Optional[str] = None
+    user_id: Optional[int] = None
+
+
 # ── Forward reference resolution ──────────────────────────────
 # Required because PatientOut references AlertOut, UrinationEventOut,
 # and AIInsightOut which are defined after it.
