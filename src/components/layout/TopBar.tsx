@@ -1,8 +1,9 @@
 import { Bell, User, ChevronDown, Search, Wifi, LogOut } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { alerts } from '../../data/mockData';
+import { alerts, type Patient } from '../../data/mockData';
 import { getCurrentUser, logout } from '../../services/authService';
+import { getPatients } from '../../services/api';
 
 const unresolved = alerts.filter(a => !a.resolved);
 
@@ -11,7 +12,54 @@ export default function TopBar({ title }: { title: string }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
+  // Search states
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
   const currentUser = getCurrentUser();
+
+  useEffect(() => {
+    let active = true;
+    getPatients()
+      .then((data) => {
+        if (active) setPatients(data);
+      })
+      .catch((err) => console.error('Failed to load patients in TopBar search:', err));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setIsFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleSelectPatient = (patientId: string) => {
+    navigate(`/patients?select=${patientId}`);
+    setSearchQuery('');
+    setIsFocused(false);
+  };
+
+  const filteredPatients = searchQuery.trim()
+    ? patients.filter((patient) => {
+        const query = searchQuery.toLowerCase();
+        return (
+          patient.name?.toLowerCase().includes(query) ||
+          patient.room?.toLowerCase().includes(query) ||
+          patient.caregiver?.toLowerCase().includes(query)
+        );
+      })
+    : [];
 
   const handleLogout = () => {
     logout();
@@ -31,13 +79,52 @@ export default function TopBar({ title }: { title: string }) {
       {/* Right: Actions */}
       <div className="flex items-center gap-3">
         {/* Search */}
-        <div className="hidden md:flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 w-52">
-          <Search className="w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search patients..."
-            className="bg-transparent text-sm text-gray-600 placeholder:text-gray-400 outline-none flex-1"
-          />
+        <div className="relative hidden md:block" ref={searchRef}>
+          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 w-52">
+            <Search className="w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search patients..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setIsFocused(true)}
+              className="bg-transparent text-sm text-gray-600 placeholder:text-gray-400 outline-none flex-1"
+            />
+          </div>
+
+          {isFocused && searchQuery && (
+            <div className="absolute left-0 mt-1.5 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden py-1 max-h-60 overflow-y-auto scrollbar-thin">
+              {filteredPatients.length === 0 ? (
+                <div className="px-4 py-3 text-xs text-gray-400 text-center">
+                  No patients found
+                </div>
+              ) : (
+                filteredPatients.map((patient) => (
+                  <button
+                    key={patient.id}
+                    onClick={() => handleSelectPatient(patient.id)}
+                    className="w-full text-left px-4 py-2.5 hover:bg-gray-50 flex items-center gap-3 transition-colors border-b border-gray-50 last:border-0"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-400 to-teal-500 flex items-center justify-center text-white text-xs font-extrabold shrink-0">
+                      {patient.name
+                        .split(' ')
+                        .map((n: string) => n[0])
+                        .join('')
+                        .slice(0, 2)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-gray-900 truncate">
+                        {patient.name}
+                      </p>
+                      <p className="text-[10px] text-gray-400 truncate mt-0.5">
+                        Room {patient.room} · {patient.caregiver}
+                      </p>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
 
         {/* System Status */}

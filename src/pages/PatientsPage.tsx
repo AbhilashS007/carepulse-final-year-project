@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Search,
   ChevronRight,
@@ -177,6 +178,22 @@ export default function PatientsPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [filterStatus, setFilterStatus] = useState<string>('All');
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectId = searchParams.get('select');
+
+  useEffect(() => {
+    if (patientsList.length > 0) {
+      if (selectId) {
+        const found = patientsList.find(p => p.id === selectId);
+        if (found) {
+          setSelectedPatient(found);
+        }
+      } else {
+        setSelectedPatient(null);
+      }
+    }
+  }, [patientsList, selectId]);
+
   const loadPatients = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -325,7 +342,10 @@ export default function PatientsPage() {
                 {filtered.map(patient => (
                   <tr
                     key={patient.id}
-                    onClick={() => setSelectedPatient(patient)}
+                    onClick={() => {
+                      setSelectedPatient(patient);
+                      setSearchParams({ select: patient.id });
+                    }}
                     className={`table-row-hover ${selectedPatient?.id === patient.id ? 'bg-blue-50 border-l-2 border-primary-500' : ''}`}
                   >
                     <td className="px-5 py-3.5">
@@ -383,7 +403,10 @@ export default function PatientsPage() {
         {selectedPatient && (
           <PatientDetailPanel
             patient={selectedPatient}
-            onClose={() => setSelectedPatient(null)}
+            onClose={() => {
+              setSelectedPatient(null);
+              setSearchParams({});
+            }}
           />
         )}
       </div>
