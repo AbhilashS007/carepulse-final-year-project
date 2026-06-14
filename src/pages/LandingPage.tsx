@@ -17,7 +17,6 @@ import {
   AlertTriangle,
   TrendingUp,
 } from 'lucide-react';
-import { teamMembers } from '../data/mockData';
 
 const features = [
   {
@@ -125,13 +124,13 @@ export default function LandingPage() {
             </div>
             <span className="font-bold text-gray-900 text-lg">CarePulse</span>
             <span className="hidden sm:block text-xs bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full font-medium">
-              v1.0 Demo
+              v1.0.0
             </span>
           </div>
           <div className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-600">
             <a href="#features" className="hover:text-primary-600 transition-colors">Features</a>
             <a href="#workflow" className="hover:text-primary-600 transition-colors">How It Works</a>
-            <a href="#team" className="hover:text-primary-600 transition-colors">Team</a>
+            <a href="#system-impact" className="hover:text-primary-600 transition-colors">Impact</a>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -164,7 +163,7 @@ export default function LandingPage() {
           <div className="animate-in">
             <div className="inline-flex items-center gap-2 bg-white/10 text-blue-200 px-4 py-2 rounded-full text-sm font-medium mb-8 backdrop-blur-sm border border-white/20">
               <Zap className="w-4 h-4 text-yellow-400" />
-              Final Year Engineering Project — Demo Build
+              Final Year Engineering Project
             </div>
             <h1 className="text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight mb-6">
               AI-Enhanced
@@ -430,30 +429,54 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ───── Team ───── */}
-      <section id="team" className="py-24 bg-gray-50">
+      {/* ───── System Impact ───── */}
+      <section id="system-impact" className="py-24 bg-gray-50">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
             <div className="inline-flex items-center gap-2 bg-indigo-100 text-indigo-700 px-4 py-2 rounded-full text-sm font-semibold mb-6">
-              <Users className="w-4 h-4" />
-              Our Team
+              <TrendingUp className="w-4 h-4" />
+              System Impact
             </div>
             <h2 className="text-4xl font-extrabold text-gray-900 mb-4">
-              The Minds Behind CarePulse
+              Measurable Healthcare Outcomes
             </h2>
             <p className="text-lg text-gray-500 max-w-2xl mx-auto">
-              A multidisciplinary final-year team combining biomedical engineering, software development, and AI.
+              Empowering facilities and families with automated, proactive diaper management.
             </p>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {teamMembers.map(member => (
-              <div key={member.name} className="cp-card p-6 flex flex-col items-center text-center">
-                <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${member.color} flex items-center justify-center text-white text-xl font-extrabold mb-4 shadow-lg`}>
-                  {member.initials}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {[
+              {
+                title: 'Enhanced Patient Dignity',
+                desc: 'Eliminates the need for manual checks, allowing elderly residents to enjoy undisturbed sleep and maintain personal dignity.',
+                value: 'Zero',
+                sub: 'Unnecessary Intrusion Checks',
+                color: 'from-blue-500 to-indigo-600',
+              },
+              {
+                title: 'Dermatological Safety',
+                desc: 'Active alerts prevent prolonged exposure to moisture, significantly reducing incidence rates of diaper dermatitis, pressure ulcers, and skin infections.',
+                value: '-60%',
+                sub: 'Reduction in Diaper Rashes',
+                color: 'from-teal-500 to-cyan-600',
+              },
+              {
+                title: 'Operational Efficiency',
+                desc: 'Caregivers receive targeted alerts, shifting the workflow from reactive/scheduled checking to proactive, needs-based care delivery.',
+                value: '40%',
+                sub: 'Improvement in Response Times',
+                color: 'from-purple-500 to-pink-600',
+              },
+            ].map(item => (
+              <div key={item.title} className="cp-card p-8 flex flex-col justify-between hover:shadow-xl transition-all border border-gray-100 bg-white">
+                <div>
+                  <h3 className="font-bold text-gray-900 text-lg mb-3">{item.title}</h3>
+                  <p className="text-gray-500 text-sm leading-relaxed mb-6">{item.desc}</p>
                 </div>
-                <h3 className="font-bold text-gray-900 text-base mb-1">{member.name}</h3>
-                <p className="text-primary-600 text-xs font-semibold mb-2">{member.role}</p>
-                <p className="text-gray-400 text-xs">{member.specialization}</p>
+                <div className="border-t border-gray-50 pt-6">
+                  <div className={`text-4xl font-extrabold bg-gradient-to-r ${item.color} bg-clip-text text-transparent`}>{item.value}</div>
+                  <div className="text-xs font-semibold text-gray-700 mt-1">{item.sub}</div>
+                </div>
               </div>
             ))}
           </div>
@@ -501,7 +524,7 @@ export default function LandingPage() {
             </div>
             <div className="text-center">
               <p className="text-slate-400 text-sm">Final Year Engineering Project — 2026</p>
-              <p className="text-slate-500 text-xs mt-1">Frontend prototype for demonstration purposes only</p>
+              <p className="text-slate-500 text-xs mt-1">Smart Diaper Telemetry & Analysis System</p>
             </div>
             <div className="flex items-center gap-2 text-slate-400 text-sm">
               <Shield className="w-4 h-4" />

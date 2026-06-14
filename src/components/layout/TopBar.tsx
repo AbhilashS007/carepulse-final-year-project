@@ -1,11 +1,9 @@
 import { Bell, User, ChevronDown, Search, Wifi, LogOut } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { alerts, type Patient } from '../../data/mockData';
+import { type Patient, type Alert } from '../../data/mockData';
 import { getCurrentUser, logout } from '../../services/authService';
-import { getPatients } from '../../services/api';
-
-const unresolved = alerts.filter(a => !a.resolved);
+import { getPatients, getAlerts } from '../../services/api';
 
 export default function TopBar({ title }: { title: string }) {
   const navigate = useNavigate();
@@ -18,7 +16,134 @@ export default function TopBar({ title }: { title: string }) {
   const [isFocused, setIsFocused] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
+  // Notification States
+  const [alertsList, setAlertsList] = useState<Alert[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const processedAlertIds = useRef<Set<string>>(new Set());
+  const isInitialLoad = useRef(true);
+
   const currentUser = getCurrentUser();
+
+  const playAlertSound = () => {
+    try {
+      const audio = new Audio('/alert.mp3');
+      audio.play().catch(err => {
+        console.warn('Audio playback blocked by browser autocomplete/interaction policy:', err);
+      });
+    } catch (err) {
+      console.error('Failed to play sound:', err);
+    }
+  };
+
+  const showDesktopNotification = (alert: Alert) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const title = `Critical Alert: ${alert.patientName}`;
+        const options = {
+          body: `${alert.type}: ${alert.message}`,
+          icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232563eb'><path d='M12 21.593c-5.63-5.539-11-10.297-11-14.402 0-3.791 3.068-5.191 5.281-5.191 1.312 0 4.151.501 5.719 4.457 1.59-3.968 4.464-4.447 5.726-4.447 2.54 0 5.274 1.621 5.274 5.181 0 4.069-5.136 8.625-11 14.402z'/></svg>",
+        };
+        new Notification(title, options);
+      } catch (err) {
+        console.error('Failed to trigger browser desktop notification:', err);
+      }
+    }
+  };
+
+  const fetchAlerts = async () => {
+    try {
+      const allAlerts = await getAlerts();
+      const unresolvedAlerts = allAlerts.filter(a => !a.resolved);
+
+      // Sort by timestamp descending
+      unresolvedAlerts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+      if (isInitialLoad.current) {
+        unresolvedAlerts.forEach(a => processedAlertIds.current.add(a.id));
+        setAlertsList(unresolvedAlerts);
+        setUnreadCount(unresolvedAlerts.length);
+        isInitialLoad.current = false;
+        return;
+      }
+
+      const newAlerts: Alert[] = [];
+      let newAlertsFound = false;
+      let newCriticalFound = false;
+
+      unresolvedAlerts.forEach((alert) => {
+        if (!processedAlertIds.current.has(alert.id)) {
+          processedAlertIds.current.add(alert.id);
+          newAlerts.push(alert);
+          newAlertsFound = true;
+          if (alert.severity === 'Critical') {
+            newCriticalFound = true;
+          }
+        }
+      });
+
+      if (newAlertsFound) {
+        if (newCriticalFound) {
+          playAlertSound();
+          newAlerts.forEach((alert) => {
+            if (alert.severity === 'Critical') {
+              showDesktopNotification(alert);
+            }
+          });
+        }
+
+        setAlertsList(prev => {
+          const merged = [...newAlerts, ...prev];
+          const unique = merged.filter((item, index, self) =>
+            self.findIndex(t => t.id === item.id) === index
+          );
+          return unique;
+        });
+        setUnreadCount(prev => prev + newAlerts.length);
+      } else {
+        setAlertsList(unresolvedAlerts);
+      }
+    } catch (err) {
+      console.error('Error fetching alerts in TopBar:', err);
+    }
+  };
+
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAlerts();
+    const interval = setInterval(() => {
+      fetchAlerts();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const handleTestAlert = (e: Event) => {
+      const customEvent = e as CustomEvent<Alert>;
+      const testAlert = customEvent.detail;
+      
+      if (!processedAlertIds.current.has(testAlert.id)) {
+        processedAlertIds.current.add(testAlert.id);
+        
+        playAlertSound();
+        if (testAlert.severity === 'Critical') {
+          showDesktopNotification(testAlert);
+        }
+
+        setAlertsList(prev => [testAlert, ...prev]);
+        setUnreadCount(prev => prev + 1);
+      }
+    };
+    
+    window.addEventListener('cp-test-alert', handleTestAlert);
+    return () => {
+      window.removeEventListener('cp-test-alert', handleTestAlert);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -137,13 +262,20 @@ export default function TopBar({ title }: { title: string }) {
         {/* Notifications */}
         <div className="relative">
           <button
-            onClick={() => setShowNotifications(!showNotifications)}
-            className="relative w-10 h-10 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors"
+            onClick={() => {
+              setShowNotifications(!showNotifications);
+              setUnreadCount(0);
+            }}
+            className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+              unreadCount > 0
+                ? 'bg-red-50 border border-red-300 text-red-600 shadow-sm'
+                : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100'
+            }`}
           >
-            <Bell className="w-5 h-5 text-gray-600" />
-            {unresolved.length > 0 && (
+            <Bell className={`w-5 h-5 ${unreadCount > 0 ? 'animate-pulse text-red-500' : 'text-gray-600'}`} />
+            {unreadCount > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-white text-xs flex items-center justify-center font-bold">
-                {unresolved.length}
+                {unreadCount}
               </span>
             )}
           </button>
@@ -152,29 +284,54 @@ export default function TopBar({ title }: { title: string }) {
             <div className="absolute right-0 top-12 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden">
               <div className="p-4 border-b border-gray-50 flex items-center justify-between">
                 <h3 className="font-semibold text-gray-900 text-sm">Active Alerts</h3>
-                <span className="cp-badge-danger text-xs">{unresolved.length} unresolved</span>
+                <span className="cp-badge-danger text-xs">{alertsList.length} unresolved</span>
               </div>
               <div className="max-h-64 overflow-y-auto scrollbar-thin divide-y divide-gray-50">
-                {unresolved.map(alert => (
-                  <div key={alert.id} className="p-3 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-start gap-2.5">
-                      <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                        alert.severity === 'Critical' ? 'bg-red-500' :
-                        alert.severity === 'Warning' ? 'bg-amber-400' : 'bg-blue-400'
-                      }`} />
-                      <div>
-                        <p className="text-xs font-semibold text-gray-800">{alert.patientName}</p>
-                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{alert.message}</p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {new Date(alert.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                        </p>
+                {alertsList.length === 0 ? (
+                  <div className="px-4 py-6 text-xs text-gray-400 text-center">
+                    No active alerts
+                  </div>
+                ) : (
+                  alertsList.map(alert => (
+                    <div key={alert.id} className="p-3 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-start gap-2.5">
+                        <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                          alert.severity === 'Critical' ? 'bg-red-500' :
+                          alert.severity === 'Warning' ? 'bg-amber-400' : 'bg-blue-400'
+                        }`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-bold text-gray-800 truncate">{alert.patientName}</p>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
+                              alert.severity === 'Critical' ? 'bg-red-50 text-red-700' :
+                              alert.severity === 'Warning' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'
+                            }`}>
+                              {alert.severity}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-gray-400 font-semibold bg-gray-100 px-1.5 py-0.5 rounded">
+                              {alert.type}
+                            </span>
+                            <span className="text-[10px] text-gray-400">
+                              {new Date(alert.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1 line-clamp-2 leading-relaxed">{alert.message}</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
               <div className="p-3 border-t border-gray-50">
-                <button className="w-full text-xs text-primary-600 font-semibold hover:text-primary-700 transition-colors">
+                <button
+                  onClick={() => {
+                    setShowNotifications(false);
+                    navigate('/alerts');
+                  }}
+                  className="w-full text-xs text-primary-600 font-semibold hover:text-primary-700 transition-colors"
+                >
                   View All Alerts →
                 </button>
               </div>

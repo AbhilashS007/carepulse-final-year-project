@@ -73,7 +73,7 @@ export default function Sidebar() {
         </div>
         <div className="mt-3 px-2">
           <p className="text-xs text-slate-500">Final Year Project</p>
-          <p className="text-xs text-slate-400 font-medium">Engineering Demo Build</p>
+          <p className="text-xs text-slate-400 font-medium">Production Release v1.0.0</p>
         </div>
       </div>
     </aside>

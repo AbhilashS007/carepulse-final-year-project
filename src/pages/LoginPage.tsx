@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Heart,
@@ -6,23 +6,27 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Zap,
   Shield,
   Activity,
   Droplets,
   ArrowRight,
-  CheckCircle2,
-  AlertTriangle,
+  Zap,
 } from 'lucide-react';
-import { login } from '../services/authService';
+import { login, isAuthenticated } from '../services/authService';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@carepulse.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isAuthenticated()) {
+      navigate('/dashboard');
+    }
+  }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,21 +39,6 @@ export default function LoginPage() {
       console.error('Login error:', err);
       const errMsg = err.response?.data?.detail || 'Invalid email or password. Please verify your credentials.';
       setError(errMsg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoLogin = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Authenticate directly with the seeded admin account
-      await login('admin@carepulse.com', 'admin123');
-      navigate('/dashboard');
-    } catch (err: any) {
-      console.error('Demo login error:', err);
-      setError('Could not connect to the authentication server.');
     } finally {
       setLoading(false);
     }
@@ -135,22 +124,12 @@ export default function LoginPage() {
             <p className="text-gray-500">Sign in to access the CarePulse monitoring dashboard.</p>
           </div>
 
-          {/* Demo credentials notice */}
-          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
-            <CheckCircle2 className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-blue-900">Seeded Credentials</p>
-              <p className="text-xs text-blue-700 mt-0.5">
-                Admin: <code className="font-mono">admin@carepulse.com</code> (admin123)<br />
-                Caregiver: <code className="font-mono">caregiver@carepulse.com</code> (care123)
-              </p>
-            </div>
-          </div>
-
           {/* Error Alert Display */}
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 flex items-start gap-3 text-red-700 animate-in">
-              <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 flex items-start gap-3 text-red-700 animate-in text-left">
+              <div className="p-1 rounded-full text-red-600 bg-red-100 mt-0.5">
+                <Zap className="w-3.5 h-3.5" />
+              </div>
               <div>
                 <p className="text-sm font-semibold text-red-950">Login Failed</p>
                 <p className="text-xs text-red-700 mt-0.5">{error}</p>
@@ -235,26 +214,9 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="flex items-center gap-4 my-6">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-xs text-gray-400 font-medium">or</span>
-            <div className="flex-1 h-px bg-gray-200" />
-          </div>
-
-          {/* Demo Login button */}
-          <button
-            onClick={handleDemoLogin}
-            disabled={loading}
-            className="w-full cp-btn-secondary py-4 text-base flex items-center justify-center gap-2 disabled:opacity-70"
-          >
-            <Zap className="w-5 h-5 text-primary-600" />
-            Demo Login — Quick Administrator Access
-          </button>
-
-          <p className="text-center text-xs text-gray-400 mt-8">
-            CarePulse — Final Year Engineering Project Demo<br />
-            © 2026 · For demonstration purposes only
+          <p className="text-center text-xs text-gray-400 mt-12">
+            CarePulse — Final Year Engineering Project<br />
+            © 2026 · All rights reserved
           </p>
         </div>
       </div>

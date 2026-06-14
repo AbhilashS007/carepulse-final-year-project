@@ -317,7 +317,7 @@ export default function AIInsightsPage() {
       {/* Footer note */}
       <div className="text-center py-4">
         <p className="text-xs text-gray-400">
-          🤖 AI insights are generated from monitoring data patterns for demonstration purposes.
+          🤖 AI insights are generated from monitoring data patterns to support caregiver decision making.
           Always consult qualified medical professionals for clinical decisions.
         </p>
       </div>
