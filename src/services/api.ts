@@ -165,6 +165,88 @@ const mapBackendPatientToFrontend = (patient: any): any => {
 };
 
 // API Service functions
+
+// Per-patient detail (wetness trend + frequency + alerts + AI insight)
+export const getPatientDetail = async (patientId: string): Promise<{
+  wetnessTrend: { time: string; wetness: number; threshold: number }[];
+  urinationFrequency: { day: string; date: string; events: number }[];
+  recentAlerts: {
+    id: string; type: string; severity: string; message: string; timestamp: string; resolved: boolean;
+  }[];
+  latestInsight: {
+    riskLevel: string; riskScore: number; confidence: number;
+    recommendation: string; trend: string; trendDirection: string; trendPercent: number;
+  } | null;
+}> => {
+  // Extract numeric id from "P001" -> 1
+  const numericId = parseInt(patientId.replace(/\D/g, ''), 10);
+  const resp = await api.get(`/patients/${numericId}`);
+  const data = resp.data;
+
+  const events: any[] = (data.urination_events || []).sort(
+    (a: any, b: any) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime()
+  );
+
+  // Build wetness trend: last 20 events as time-series data points
+  const wetnessTrend = events.slice(-20).map((e: any) => {
+    const d = new Date(e.recorded_at);
+    const label = `${d.toLocaleString('en-US', { month: 'short' })} ${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return { time: label, wetness: Math.round(e.wetness_percent), threshold: 75 };
+  });
+
+  // Build urination frequency: count events per day (last 7 distinct days)
+  const dayMap = new Map<string, number>();
+  events.forEach((e: any) => {
+    const day = e.recorded_at.split('T')[0];
+    dayMap.set(day, (dayMap.get(day) || 0) + 1);
+  });
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const urinationFrequency = Array.from(dayMap.entries())
+    .slice(-7)
+    .map(([dateStr, count]) => {
+      const d = new Date(dateStr);
+      return { day: dayNames[d.getDay()], date: `${monthNames[d.getMonth()]} ${d.getDate()}`, events: count };
+    });
+
+  // Build recent alerts (latest 5, for this patient)
+  const recentAlerts = (data.alerts || [])
+    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 5)
+    .map((a: any) => ({
+      id: `A${String(a.id).padStart(3, '0')}`,
+      type: mapAlertType(a.alert_type),
+      severity: mapSeverity(a.severity),
+      message: a.message,
+      timestamp: a.created_at,
+      resolved: a.resolved,
+    }));
+
+  // Latest AI insight
+  const rawInsights: any[] = (data.ai_insights || []).sort(
+    (a: any, b: any) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime()
+  );
+  let latestInsight = null;
+  if (rawInsights.length > 0) {
+    const i = rawInsights[0];
+    let trend = 'Stable urination pattern';
+    if (i.risk_level === 'critical') trend = 'Urination frequency increased significantly';
+    else if (i.risk_level === 'high') trend = 'Urination frequency increased moderately';
+    else if (i.trend_direction === 'down') trend = 'Improving continence pattern';
+    latestInsight = {
+      riskLevel: mapRiskLevel(i.risk_level),
+      riskScore: i.risk_score,
+      confidence: i.confidence,
+      recommendation: i.recommendation,
+      trend,
+      trendDirection: i.trend_direction,
+      trendPercent: i.trend_percent,
+    };
+  }
+
+  return { wetnessTrend, urinationFrequency, recentAlerts, latestInsight };
+};
+
 export const getPatients = async (): Promise<any[]> => {
   const response = await api.get('/patients');
   const summaries = response.data;

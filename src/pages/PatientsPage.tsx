@@ -12,7 +12,19 @@ import {
   Activity,
   User,
   AlertTriangle,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Brain,
+  Bell,
+  BarChart2,
+  LineChart as LineChartIcon,
 } from 'lucide-react';
+import {
+  LineChart, Line, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ReferenceLine,
+} from 'recharts';
 import {
   type Patient,
   getWetnessColor,
@@ -20,8 +32,12 @@ import {
   getBatteryColor,
   getRiskColor,
 } from '../data/mockData';
-import { getPatients } from '../services/api';
+import { getPatients, getPatientDetail } from '../services/api';
 
+// ── Types ──────────────────────────────────────────────────────
+type PatientDetailData = Awaited<ReturnType<typeof getPatientDetail>>;
+
+// ── Helpers ────────────────────────────────────────────────────
 function WetnessBar({ percent }: { percent: number }) {
   return (
     <div className="flex items-center gap-2">
@@ -57,10 +73,57 @@ function DeviceStatusBadge({ status }: { status: Patient['deviceStatus'] }) {
   );
 }
 
-function PatientDetailPanel({ patient, onClose }: { patient: Patient; onClose: () => void }) {
+// ── Skeleton Loader ────────────────────────────────────────────
+function Skeleton({ className }: { className?: string }) {
+  return <div className={`bg-gray-100 rounded-lg animate-pulse ${className ?? ''}`} />;
+}
+
+function ChartSkeleton() {
   return (
-    <div className="cp-card p-6 animate-in">
-      {/* Header */}
+    <div className="space-y-2 mt-2">
+      <Skeleton className="h-3 w-24" />
+      <Skeleton className="h-28 w-full" />
+    </div>
+  );
+}
+
+// ── Severity badge colour ──────────────────────────────────────
+function severityBadgeClass(severity: string) {
+  if (severity === 'Critical') return 'bg-red-100 text-red-700';
+  if (severity === 'Warning')  return 'bg-amber-100 text-amber-700';
+  return 'bg-blue-100 text-blue-700';
+}
+
+function formatRelTs(ts: string) {
+  const diff = Date.now() - new Date(ts).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'Just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+// ── Main detail panel ─────────────────────────────────────────
+function PatientDetailPanel({ patient, onClose }: { patient: Patient; onClose: () => void }) {
+  const [detail, setDetail]   = useState<PatientDetailData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [detailErr, setDetailErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDetail(null);
+    setDetailErr(null);
+    setLoading(true);
+    getPatientDetail(patient.id)
+      .then(d => { if (!cancelled) { setDetail(d); setLoading(false); } })
+      .catch(e => { if (!cancelled) { setDetailErr(e?.message || 'Failed to load analytics.'); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [patient.id]);
+
+  return (
+    <div className="cp-card p-6 animate-in overflow-y-auto max-h-[calc(100vh-120px)]">
+      {/* ── Header ── */}
       <div className="flex items-start justify-between mb-6">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-teal-600 flex items-center justify-center text-white text-xl font-extrabold shadow-lg">
@@ -72,28 +135,21 @@ function PatientDetailPanel({ patient, onClose }: { patient: Patient; onClose: (
             <p className="text-xs text-gray-400 mt-0.5">{patient.ward} · Room {patient.room}</p>
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
-        >
+        <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
           <X className="w-5 h-5 text-gray-400" />
         </button>
       </div>
 
-      {/* Status Grid */}
+      {/* ── Status Grid ── */}
       <div className="grid grid-cols-2 gap-3 mb-5">
         <div className="bg-gray-50 rounded-xl p-3">
           <p className="text-xs text-gray-500 mb-1">Current Wetness</p>
-          <p className={`text-2xl font-extrabold ${getWetnessColor(patient.wetnessPercent)}`}>
-            {patient.wetnessPercent}%
-          </p>
+          <p className={`text-2xl font-extrabold ${getWetnessColor(patient.wetnessPercent)}`}>{patient.wetnessPercent}%</p>
           <p className="text-xs text-gray-400 mt-0.5">{patient.wetnessLevel}</p>
         </div>
         <div className="bg-gray-50 rounded-xl p-3">
           <p className="text-xs text-gray-500 mb-1">Battery Level</p>
-          <p className={`text-2xl font-extrabold ${getBatteryColor(patient.batteryPercent)}`}>
-            {patient.batteryPercent}%
-          </p>
+          <p className={`text-2xl font-extrabold ${getBatteryColor(patient.batteryPercent)}`}>{patient.batteryPercent}%</p>
           <p className="text-xs text-gray-400 mt-0.5">{patient.deviceId}</p>
         </div>
         <div className="bg-gray-50 rounded-xl p-3">
@@ -108,7 +164,7 @@ function PatientDetailPanel({ patient, onClose }: { patient: Patient; onClose: (
         </div>
       </div>
 
-      {/* Risk Score */}
+      {/* ── Risk Score ── */}
       <div className="mb-5">
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm font-semibold text-gray-700">Risk Score</p>
@@ -128,7 +184,7 @@ function PatientDetailPanel({ patient, onClose }: { patient: Patient; onClose: (
         </div>
       </div>
 
-      {/* Device + Caregiver */}
+      {/* ── Device + Caregiver ── */}
       <div className="space-y-3 border-t border-gray-50 pt-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -153,7 +209,7 @@ function PatientDetailPanel({ patient, onClose }: { patient: Patient; onClose: (
         </div>
       </div>
 
-      {/* Notes */}
+      {/* ── Notes ── */}
       {patient.notes && (
         <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl">
           <div className="flex items-center gap-1.5 mb-1">
@@ -163,6 +219,147 @@ function PatientDetailPanel({ patient, onClose }: { patient: Patient; onClose: (
           <p className="text-xs text-amber-700">{patient.notes}</p>
         </div>
       )}
+
+      {/* ════════════════════════════════════════════
+          ANALYTICS SECTIONS (lazy-loaded)
+          ════════════════════════════════════════════ */}
+      <div className="mt-5 pt-5 border-t border-gray-100 space-y-5">
+
+        {/* ── Error state ── */}
+        {detailErr && !loading && (
+          <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600">
+            <span className="font-semibold">Analytics unavailable: </span>{detailErr}
+          </div>
+        )}
+
+        {/* ══ 1. Wetness Trend ══ */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <LineChartIcon className="w-4 h-4 text-primary-500" />
+            <p className="text-sm font-semibold text-gray-700">Wetness Trend</p>
+          </div>
+          {loading ? <ChartSkeleton /> : !detail || detail.wetnessTrend.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">No wetness data available.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={110}>
+              <LineChart data={detail.wetnessTrend} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="time" tick={{ fontSize: 9, fill: '#9ca3af' }} tickLine={false}
+                  interval={Math.max(0, Math.floor(detail.wetnessTrend.length / 4) - 1)} />
+                <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} tickLine={false} domain={[0, 100]} />
+                <Tooltip
+                  contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb', padding: '4px 8px' }}
+                  formatter={(v: number) => [`${v}%`, 'Wetness']}
+                />
+                <ReferenceLine y={75} stroke="#f97316" strokeDasharray="4 4" strokeWidth={1.5} />
+                <Line type="monotone" dataKey="wetness" stroke="#0ea5e9" strokeWidth={2}
+                  dot={false} activeDot={{ r: 4, fill: '#0ea5e9' }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+          <p className="text-[10px] text-gray-400 mt-1">Orange line = 75% threshold</p>
+        </div>
+
+        {/* ══ 2. Urination Frequency ══ */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <BarChart2 className="w-4 h-4 text-teal-500" />
+            <p className="text-sm font-semibold text-gray-700">Urination Frequency</p>
+          </div>
+          {loading ? <ChartSkeleton /> : !detail || detail.urinationFrequency.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">No frequency data available.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={100}>
+              <BarChart data={detail.urinationFrequency} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="day" tick={{ fontSize: 9, fill: '#9ca3af' }} tickLine={false} />
+                <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} tickLine={false} />
+                <Tooltip
+                  contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e7eb', padding: '4px 8px' }}
+                  formatter={(v: number) => [v, 'Events']}
+                />
+                <Bar dataKey="events" fill="#14b8a6" radius={[3, 3, 0, 0]} maxBarSize={28} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+          <p className="text-[10px] text-gray-400 mt-1">Events per day (last 7 days)</p>
+        </div>
+
+        {/* ══ 3. Recent Alerts ══ */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Bell className="w-4 h-4 text-amber-500" />
+            <p className="text-sm font-semibold text-gray-700">Recent Alerts</p>
+          </div>
+          {loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
+          ) : !detail || detail.recentAlerts.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">No alerts for this patient.</p>
+          ) : (
+            <div className="space-y-2">
+              {detail.recentAlerts.map(a => (
+                <div key={a.id} className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <span className={`mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0 ${severityBadgeClass(a.severity)}`}>
+                    {a.severity}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-gray-800 truncate">{a.type}</p>
+                    <p className="text-[10px] text-gray-400">{formatRelTs(a.timestamp)}{a.resolved ? ' · Resolved' : ''}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ══ 4. Latest AI Insight ══ */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Brain className="w-4 h-4 text-indigo-500" />
+            <p className="text-sm font-semibold text-gray-700">Latest AI Insight</p>
+          </div>
+          {loading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-5/6" />
+            </div>
+          ) : !detail || !detail.latestInsight ? (
+            <p className="text-xs text-gray-400 italic">No AI insight available yet.</p>
+          ) : (
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 space-y-2">
+              {/* Risk + Confidence row */}
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${getRiskColor(detail.latestInsight.riskLevel as any)}`}>
+                  {detail.latestInsight.riskLevel} · {detail.latestInsight.riskScore}/100
+                </span>
+                <span className="text-xs text-indigo-600 font-semibold">
+                  {detail.latestInsight.confidence}% confidence
+                </span>
+              </div>
+              {/* Trend */}
+              <div className="flex items-center gap-1.5">
+                {detail.latestInsight.trendDirection === 'up'   && <TrendingUp   className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+                {detail.latestInsight.trendDirection === 'down' && <TrendingDown className="w-3.5 h-3.5 text-green-500 shrink-0" />}
+                {detail.latestInsight.trendDirection === 'stable' && <Minus       className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
+                <p className="text-xs text-gray-700 font-medium">{detail.latestInsight.trend}</p>
+                {detail.latestInsight.trendPercent > 0 && (
+                  <span className="text-[10px] text-gray-400 ml-auto shrink-0">
+                    {detail.latestInsight.trendPercent}%
+                  </span>
+                )}
+              </div>
+              {/* Recommendation */}
+              <p className="text-[11px] text-indigo-800 leading-relaxed">
+                {detail.latestInsight.recommendation}
+              </p>
+            </div>
+          )}
+        </div>
+
+      </div>
     </div>
   );
 }
