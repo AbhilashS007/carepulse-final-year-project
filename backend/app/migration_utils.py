@@ -33,6 +33,9 @@ MIGRATIONS: list[str] = [
     # ── Phase 2: Disease-Aware AI fields ─────────────────────────
     "ALTER TABLE ai_insights ADD COLUMN risk_explanation TEXT",
     "ALTER TABLE ai_insights ADD COLUMN monitoring_advice TEXT",
+
+    # ── Phase 2 Level 3: AI engine provenance ─────────────────
+    "ALTER TABLE ai_insights ADD COLUMN generated_by VARCHAR(50) NOT NULL DEFAULT 'rule_engine'",
 ]
 
 

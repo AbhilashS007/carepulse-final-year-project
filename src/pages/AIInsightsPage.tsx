@@ -12,10 +12,11 @@ import {
   ArrowDown,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { type AIInsight, getRiskColor } from '../data/mockData';
-import { getAIInsights } from '../services/api';
+import { getAIInsights, regenerateInsight } from '../services/api';
 
 function RiskGauge({ score }: { score: number }) {
   const clampedScore = Math.max(0, Math.min(100, score));
@@ -60,8 +61,21 @@ function RiskGauge({ score }: { score: number }) {
   );
 }
 
-function InsightCard({ insight }: { insight: AIInsight }) {
+function InsightCard({ insight, onRegenerated }: { insight: AIInsight; onRegenerated: () => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    try {
+      await regenerateInsight(insight.patientId);
+      onRegenerated();
+    } catch (err) {
+      console.error('Failed to regenerate insight:', err);
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   const riskColors = {
     Low: 'border-green-200 bg-gradient-to-br from-green-50 to-white',
@@ -196,9 +210,22 @@ function InsightCard({ insight }: { insight: AIInsight }) {
             </span>
           ))}
         </div>
-        <div className="flex items-center gap-1 text-xs text-gray-400">
-          <Clock className="w-3 h-3" />
-          {new Date(insight.generatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} today
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRegenerate}
+            disabled={regenerating}
+            className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full
+                       bg-purple-100 text-purple-700 hover:bg-purple-200
+                       disabled:opacity-50 disabled:cursor-not-allowed
+                       transition-all active:scale-95"
+          >
+            <RefreshCw className={`w-3 h-3 ${regenerating ? 'animate-spin' : ''}`} />
+            {regenerating ? 'Generating...' : 'Regenerate'}
+          </button>
+          <div className="flex items-center gap-1 text-xs text-gray-400">
+            <Clock className="w-3 h-3" />
+            {new Date(insight.generatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} today
+          </div>
         </div>
       </div>
     </div>
@@ -334,7 +361,7 @@ export default function AIInsightsPage() {
       {/* Insight Cards Grid */}
       <div className="grid xl:grid-cols-2 gap-5">
         {sorted.map(insight => (
-          <InsightCard key={insight.id} insight={insight} />
+          <InsightCard key={insight.id} insight={insight} onRegenerated={loadInsights} />
         ))}
       </div>
 

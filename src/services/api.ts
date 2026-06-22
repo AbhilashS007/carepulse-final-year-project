@@ -538,7 +538,14 @@ export const getAIInsights = async (): Promise<any[]> => {
       monitoringAdvice: i.monitoring_advice,
       generatedAt: i.generated_at,
       confidence: i.confidence,
+      generatedBy: i.generated_by || 'rule_engine',
       tags: i.tags ? i.tags.split(',') : [],
     };
   });
+};
+
+export const regenerateInsight = async (patientId: string): Promise<any> => {
+  const numericId = parseInt(patientId.replace(/\D/g, ''), 10);
+  const resp = await api.post(`/ai-insights/generate/${numericId}`);
+  return resp.data;
 };

@@ -365,6 +365,12 @@ class AIInsight(Base):
         comment="Comma-separated clinical tags, e.g. 'Renal,Nocturia,Urgent'"
     )
 
+    # Which engine produced this insight — enables future Gemini vs rule_engine comparison.
+    generated_by: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="rule_engine",
+        comment="Engine identifier: 'rule_engine' (Phase 2) or 'gemini' (future Phase 3)"
+    )
+
     # When the AI model generated this insight (may differ from DB insert time)
     generated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
 

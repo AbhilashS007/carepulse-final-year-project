@@ -271,6 +271,11 @@ class AIInsightBase(_Base):
         example="Post-Stroke,Neurogenic,Frequency Trend",
         description="Comma-separated clinical category tags"
     )
+    generated_by:    str = Field(
+        "rule_engine", max_length=50,
+        example="rule_engine",
+        description="Engine that produced this insight: 'rule_engine' or 'gemini'"
+    )
     generated_at:    datetime = Field(..., example="2026-06-13T13:00:00")
 
     @field_validator("risk_level")
@@ -310,12 +315,14 @@ class AIInsightUpdate(_Base):
     monitoring_advice: Optional[str]  = None
     confidence:      Optional[float] = Field(None, ge=0.0, le=100.0)
     tags:            Optional[str]   = Field(None, max_length=500)
+    generated_by:    Optional[str]   = Field(None, max_length=50)
 
 
 class AIInsightOut(AIInsightBase):
     """Schema for GET /ai-insights responses."""
     id:         int
     created_at: datetime
+    generated_by: str = "rule_engine"
     disease:    Optional[str] = None
     disease_severity: Optional[str] = None
 

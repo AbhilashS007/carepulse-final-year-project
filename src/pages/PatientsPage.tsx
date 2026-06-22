@@ -25,6 +25,7 @@ import {
   CheckCircle,
   History,
   Stethoscope,
+  RefreshCw,
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar,
@@ -38,7 +39,7 @@ import {
   getBatteryColor,
   getRiskColor,
 } from '../data/mockData';
-import { getPatients, getPatientDetail } from '../services/api';
+import { getPatients, getPatientDetail, regenerateInsight } from '../services/api';
 import PatientFormModal  from '../components/patients/PatientFormModal';
 import ArchiveConfirmDialog from '../components/patients/ArchiveConfirmDialog';
 import PatientTimeline  from '../components/patients/PatientTimeline';
@@ -144,6 +145,16 @@ function PatientDetailPanel({
   const [loading, setLoading] = useState(false);
   const [detailErr, setDetailErr] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'analytics' | 'timeline'>('analytics');
+  const [regenerating, setRegenerating] = useState(false);
+
+  const loadDetail = () => {
+    setDetail(null);
+    setDetailErr(null);
+    setLoading(true);
+    getPatientDetail(patient.id)
+      .then(d => { setDetail(d); setLoading(false); })
+      .catch(e => { setDetailErr(e?.message || 'Failed to load analytics.'); setLoading(false); });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -155,6 +166,18 @@ function PatientDetailPanel({
       .catch(e => { if (!cancelled) { setDetailErr(e?.message || 'Failed to load analytics.'); setLoading(false); } });
     return () => { cancelled = true; };
   }, [patient.id]);
+
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    try {
+      await regenerateInsight(patient.id);
+      loadDetail();
+    } catch (err) {
+      console.error('Failed to regenerate insight:', err);
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   return (
     <div className="cp-card p-6 animate-in overflow-y-auto max-h-[calc(100vh-120px)]">
@@ -480,6 +503,20 @@ function PatientDetailPanel({
                 </div>
               )}
             </div>
+
+            {/* ══ 5. Regenerate Insight Button ══ */}
+            <button
+              onClick={handleRegenerate}
+              disabled={regenerating}
+              className="w-full flex items-center justify-center gap-2 py-2.5 mt-2
+                         rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700
+                         text-xs font-semibold hover:bg-indigo-100
+                         disabled:opacity-50 disabled:cursor-not-allowed
+                         transition-all active:scale-[0.98]"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${regenerating ? 'animate-spin' : ''}`} />
+              {regenerating ? 'Generating New Insight...' : 'Regenerate AI Insight'}
+            </button>
           </div>
         )}
 
