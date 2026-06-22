@@ -24,4 +24,14 @@ def read_ai_insights(
     Requires authentication.
     """
     insights = crud.get_all_ai_insights(db, skip=skip, limit=limit)
-    return insights
+    
+    # Map patient disease fields to the output model
+    result = []
+    for insight in insights:
+        out = schemas.AIInsightOut.model_validate(insight)
+        if insight.patient:
+            out.disease = insight.patient.disease
+            out.disease_severity = insight.patient.disease_severity
+        result.append(out)
+        
+    return result

@@ -17,10 +17,11 @@ Design notes:
 """
 
 import enum
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -118,6 +119,32 @@ class Patient(Base):
     # IoT device — stored as a string identifier (e.g., "CP-DEV-001")
     # This can be promoted to a FK if a separate devices table is added later.
     device_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+
+    # ── Archive flag (soft delete) ────────────────────────────
+    # Never permanently delete patient records.
+    # Archived patients are hidden from active views but fully preserved.
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # ── Disease Profile (Phase 2 Gemini Clinical Insights readiness) ─
+    # Structured, machine-readable fields consumed by the AI engine.
+    # Separate from 'condition' (free-text clinical note for caregivers).
+    #
+    #   disease          → canonical disease name (e.g., "Chronic Kidney Disease")
+    #   disease_severity → controlled enum: mild | moderate | severe | critical
+    #   diagnosis_date   → ISO date the disease was diagnosed;
+    #                       enables duration calculations in Gemini prompts
+    disease:          Mapped[str | None] = mapped_column(
+        String(200), nullable=True,
+        comment="Canonical disease name for AI-assisted clinical analysis"
+    )
+    disease_severity: Mapped[str | None] = mapped_column(
+        String(20), nullable=True,
+        comment="Enum: mild | moderate | severe | critical"
+    )
+    diagnosis_date:   Mapped[date | None] = mapped_column(
+        Date, nullable=True,
+        comment="Date of formal disease diagnosis — used to compute disease_duration_days in AI prompts"
+    )
 
     # Timestamps
     # server_default uses the DB engine clock — works on SQLite, MySQL, and PostgreSQL.
@@ -320,7 +347,9 @@ class AIInsight(Base):
 
     # AI-generated text content
     insight_text:   Mapped[str] = mapped_column(Text, nullable=False)
+    risk_explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
     recommendation: Mapped[str] = mapped_column(Text, nullable=False)
+    monitoring_advice: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Model metadata
     confidence: Mapped[float] = mapped_column(

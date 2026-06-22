@@ -119,6 +119,32 @@ const getEstimatedLastChange = (events: any[]): string => {
   return '4h 12m ago'; // Realistic fallback
 };
 
+// ── Patient form payload (matches backend PatientCreate schema) ─────────
+export interface PatientFormData {
+  name:             string;
+  age:              number;
+  ward:             string;
+  room:             string;
+  condition:        string;
+  caregiver_name:   string;
+  device_id:        string;
+  notes?:           string;
+  // Disease profile (optional — Gemini Phase 2 readiness)
+  disease?:         string;
+  disease_severity?: string;  // mild | moderate | severe | critical
+  diagnosis_date?:  string;   // ISO date "YYYY-MM-DD"
+}
+
+// ── Timeline event returned by getPatientDetail ────────────────────
+export interface TimelineEvent {
+  id:            string;
+  type:          'created' | 'diagnosed' | 'alert' | 'insight' | 'urination';
+  timestamp:     string;          // ISO datetime, used for sort order
+  title:         string;
+  description?:  string;
+  severityColor: 'green' | 'indigo' | 'red' | 'amber' | 'blue' | 'gray';
+}
+
 // Map backend patient details (including relationships) to frontend Patient format
 const mapBackendPatientToFrontend = (patient: any): any => {
   const events = patient.urination_events || [];
@@ -161,14 +187,20 @@ const mapBackendPatientToFrontend = (patient: any): any => {
     condition: patient.condition,
     caregiver: patient.caregiver_name,
     notes: patient.notes || '',
+    // ── Phase 1 new fields ─────────────────────────────────────
+    isArchived:      patient.is_archived ?? false,
+    // Disease profile (Gemini Phase 2 readiness)
+    disease:         patient.disease         ?? undefined,
+    diseaseSeverity: patient.disease_severity ?? undefined,
+    diagnosisDate:   patient.diagnosis_date   ?? undefined,
   };
 };
 
 // API Service functions
 
-// Per-patient detail (wetness trend + frequency + alerts + AI insight)
+// Per-patient detail (wetness trend + frequency + alerts + AI insight + timeline)
 export const getPatientDetail = async (patientId: string): Promise<{
-  wetnessTrend: { time: string; wetness: number; threshold: number }[];
+  wetnessTrend:       { time: string; wetness: number; threshold: number }[];
   urinationFrequency: { day: string; date: string; events: number }[];
   recentAlerts: {
     id: string; type: string; severity: string; message: string; timestamp: string; resolved: boolean;
@@ -176,7 +208,11 @@ export const getPatientDetail = async (patientId: string): Promise<{
   latestInsight: {
     riskLevel: string; riskScore: number; confidence: number;
     recommendation: string; trend: string; trendDirection: string; trendPercent: number;
+    insight: string;
+    disease?: string;
+    diseaseSeverity?: string;
   } | null;
+  timelineEvents: TimelineEvent[];
 }> => {
   // Extract numeric id from "P001" -> 1
   const numericId = parseInt(patientId.replace(/\D/g, ''), 10);
@@ -241,14 +277,93 @@ export const getPatientDetail = async (patientId: string): Promise<{
       trend,
       trendDirection: i.trend_direction,
       trendPercent: i.trend_percent,
+      insight: i.insight_text,
+      disease: data.disease,
+      diseaseSeverity: data.disease_severity,
     };
   }
 
-  return { wetnessTrend, urinationFrequency, recentAlerts, latestInsight };
+  // ── Build patient timeline (newest first) ────────────────────────────
+  const allEvents: TimelineEvent[] = [];
+
+  // 1. Patient created
+  allEvents.push({
+    id: 'created',
+    type: 'created',
+    timestamp: data.created_at,
+    title: 'Patient Registered',
+    description: `${data.name} admitted to ${data.ward}, Room ${data.room}`,
+    severityColor: 'green',
+  });
+
+  // 2. Disease diagnosed (only if both diagnosis_date and disease are set)
+  if (data.diagnosis_date && data.disease) {
+    const sev = data.disease_severity
+      ? ` — ${data.disease_severity.charAt(0).toUpperCase() + data.disease_severity.slice(1)} severity`
+      : '';
+    allEvents.push({
+      id: 'diagnosed',
+      type: 'diagnosed',
+      timestamp: `${data.diagnosis_date}T00:00:00`,
+      title: 'Disease Diagnosed',
+      description: `${data.disease}${sev}`,
+      severityColor: 'indigo',
+    });
+  }
+
+  // 3. Alerts
+  (data.alerts || []).forEach((a: any) => {
+    const sevColor: TimelineEvent['severityColor'] =
+      a.severity === 'critical' ? 'red' : a.severity === 'warning' ? 'amber' : 'blue';
+    allEvents.push({
+      id: `alert-${a.id}`,
+      type: 'alert',
+      timestamp: a.created_at,
+      title: mapAlertType(a.alert_type),
+      description: a.message,
+      severityColor: sevColor,
+    });
+  });
+
+  // 4. AI Insights
+  (data.ai_insights || []).forEach((i: any) => {
+    allEvents.push({
+      id: `insight-${i.id}`,
+      type: 'insight',
+      timestamp: i.generated_at,
+      title: `AI Insight — ${mapRiskLevel(i.risk_level)} Risk · ${i.risk_score}/100`,
+      description: i.insight_text.length > 120
+        ? i.insight_text.slice(0, 120) + '…'
+        : i.insight_text,
+      severityColor: 'indigo',
+    });
+  });
+
+  // 5. Urination events (latest 10 to avoid flooding the timeline)
+  const sortedByDesc = [...(data.urination_events || [])].sort(
+    (a: any, b: any) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime()
+  );
+  sortedByDesc.slice(0, 10).forEach((e: any) => {
+    const wCol: TimelineEvent['severityColor'] =
+      e.wetness_percent > 80 ? 'red' : e.wetness_percent > 60 ? 'amber' : 'blue';
+    allEvents.push({
+      id: `event-${e.id}`,
+      type: 'urination',
+      timestamp: e.recorded_at,
+      title: `Sensor Reading — ${Math.round(e.wetness_percent)}% Wetness`,
+      description: `Battery ${Math.round(e.battery_percent)}% · ${e.device_status.charAt(0).toUpperCase() + e.device_status.slice(1)}`,
+      severityColor: wCol,
+    });
+  });
+
+  // Sort all events newest first
+  allEvents.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  return { wetnessTrend, urinationFrequency, recentAlerts, latestInsight, timelineEvents: allEvents };
 };
 
-export const getPatients = async (): Promise<any[]> => {
-  const response = await api.get('/patients');
+export const getPatients = async (filter: 'active' | 'archived' | 'all' = 'active'): Promise<any[]> => {
+  const response = await api.get('/patients', { params: { archived: filter } });
   const summaries = response.data;
   
   // Fetch detailed info for each patient to construct full profiles
@@ -258,6 +373,39 @@ export const getPatients = async (): Promise<any[]> => {
   });
   
   return Promise.all(detailPromises);
+};
+
+// ── Write operations (Phase 1) ──────────────────────────────────
+
+export const createPatient = async (data: PatientFormData): Promise<any> => {
+  // Strip empty optional strings so the backend receives null (not "")
+  const payload = {
+    ...data,
+    notes:            data.notes            || undefined,
+    disease:          data.disease          || undefined,
+    disease_severity: data.disease_severity || undefined,
+    diagnosis_date:   data.diagnosis_date   || undefined,
+  };
+  const response = await api.post('/patients', payload);
+  return response.data;
+};
+
+export const updatePatient = async (id: string, data: PatientFormData): Promise<any> => {
+  const numericId = parseInt(id.replace(/\D/g, ''), 10);
+  const payload = {
+    ...data,
+    notes:            data.notes            || undefined,
+    disease:          data.disease          || undefined,
+    disease_severity: data.disease_severity || undefined,
+    diagnosis_date:   data.diagnosis_date   || undefined,
+  };
+  const response = await api.put(`/patients/${numericId}`, payload);
+  return response.data;
+};
+
+export const archivePatient = async (id: string): Promise<void> => {
+  const numericId = parseInt(id.replace(/\D/g, ''), 10);
+  await api.patch(`/patients/${numericId}/archive`);
 };
 
 export const getAlerts = async (): Promise<any[]> => {
@@ -377,13 +525,17 @@ export const getAIInsights = async (): Promise<any[]> => {
       patientId: `P${String(i.patient_id).padStart(3, '0')}`,
       patientName: patientInfo.name,
       age: patientInfo.age,
+      disease: i.disease,
+      diseaseSeverity: i.disease_severity,
       riskScore: i.risk_score,
       riskLevel: mapRiskLevel(i.risk_level),
       trend,
       trendDirection: i.trend_direction,
       trendPercent: i.trend_percent,
       insight: i.insight_text,
+      riskExplanation: i.risk_explanation,
       recommendation: i.recommendation,
+      monitoringAdvice: i.monitoring_advice,
       generatedAt: i.generated_at,
       confidence: i.confidence,
       tags: i.tags ? i.tags.split(',') : [],

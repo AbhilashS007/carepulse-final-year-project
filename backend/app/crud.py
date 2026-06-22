@@ -12,7 +12,8 @@ Design principles:
 
 Functions provided
 ──────────────────
-  Patients  : get_all_patients, get_patient_by_id
+  Patients  : get_all_patients, get_patient_by_id,
+              create_patient, update_patient, archive_patient
   Alerts    : get_all_alerts
   Analytics : get_dashboard_stats, get_wetness_trend, get_urination_frequency
   AI Insights: get_all_ai_insights
@@ -27,6 +28,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import AIInsight, Alert, Patient, UrinationEvent
+from app import schemas
 
 
 # ================================================================
@@ -62,24 +64,35 @@ def get_all_patients(
     db: Session,
     skip: int = 0,
     limit: int = 100,
+    archived: str = "active",
 ) -> list[Patient]:
     """
-    Return a flat list of all Patient rows, ordered by name.
+    Return a flat list of Patient rows ordered by name.
 
     Parameters
     ----------
-    skip  : Number of rows to skip (for pagination).
-    limit : Maximum rows to return (capped at 100 by default).
+    skip     : Number of rows to skip (for pagination).
+    limit    : Maximum rows to return (capped at 100 by default).
+    archived : Filter mode — one of:
+               "active"   → only non-archived patients (default)
+               "archived" → only archived patients
+               "all"      → all patients regardless of archive status
 
     Notes
     -----
-    - Relationships (alerts, urination_events, ai_insights) are NOT
-      eagerly loaded here — the list endpoint uses PatientSummaryOut
-      which does not include nested data, keeping responses fast.
-    - For the Patients page table this is all the data needed.
+    - Relationships are NOT eagerly loaded here — the list endpoint uses
+      PatientSummaryOut which does not include nested data.
     """
+    query = db.query(Patient)
+
+    if archived == "active":
+        query = query.filter(Patient.is_archived == False)   # noqa: E712
+    elif archived == "archived":
+        query = query.filter(Patient.is_archived == True)    # noqa: E712
+    # "all" → no filter applied
+
     return (
-        db.query(Patient)
+        query
         .order_by(Patient.name)
         .offset(skip)
         .limit(limit)
@@ -107,6 +120,110 @@ def get_patient_by_id(db: Session, patient_id: int) -> Optional[Patient]:
         .filter(Patient.id == patient_id)
         .first()
     )
+
+
+def create_patient(db: Session, patient_data: "schemas.PatientCreate") -> Patient:
+    """
+    Insert a new patient into the database.
+
+    Raises
+    ------
+    ValueError
+        If another patient already uses the same device_id.
+        The router converts this to a 409 Conflict HTTP response.
+    """
+    # Device ID must be globally unique
+    existing = (
+        db.query(Patient)
+        .filter(Patient.device_id == patient_data.device_id)
+        .first()
+    )
+    if existing:
+        raise ValueError(
+            f"Device ID '{patient_data.device_id}' is already assigned to patient "
+            f"'{existing.name}' (ID {existing.id})."
+        )
+
+    # Exclude None disease fields so the DB defaults (NULL) are used cleanly
+    patient = Patient(**patient_data.model_dump(exclude_none=True))
+    db.add(patient)
+    db.commit()
+
+    # Reload with relationships so the response includes empty arrays
+    return get_patient_by_id(db, patient.id)  # type: ignore[return-value]
+
+
+def update_patient(
+    db: Session,
+    patient_id: int,
+    patient_data: "schemas.PatientCreate",
+) -> Optional[Patient]:
+    """
+    Fully replace a patient's mutable fields (PUT semantics).
+
+    Returns None if the patient does not exist.
+
+    Raises
+    ------
+    ValueError
+        If the new device_id is already used by a *different* patient.
+    """
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if patient is None:
+        return None
+
+    # Only check uniqueness if the device_id is actually changing
+    if patient_data.device_id != patient.device_id:
+        conflict = (
+            db.query(Patient)
+            .filter(
+                Patient.device_id == patient_data.device_id,
+                Patient.id != patient_id,
+            )
+            .first()
+        )
+        if conflict:
+            raise ValueError(
+                f"Device ID '{patient_data.device_id}' is already assigned to patient "
+                f"'{conflict.name}' (ID {conflict.id})."
+            )
+
+    # Check if disease or severity changed before updating
+    disease_changed = (patient.disease != getattr(patient_data, "disease", None)) or (patient.disease_severity != getattr(patient_data, "disease_severity", None))
+
+    # Apply all fields from the payload, setting disease fields to None when omitted
+    data = patient_data.model_dump()
+    for field, value in data.items():
+        setattr(patient, field, value)
+
+    db.commit()
+    
+    if disease_changed:
+        try:
+            from app.services import disease_ai
+            disease_ai.generate_insight(db, patient_id)
+        except ImportError:
+            pass
+            
+    return get_patient_by_id(db, patient_id)
+
+
+def archive_patient(db: Session, patient_id: int) -> Optional[Patient]:
+    """
+    Soft-archive a patient by setting is_archived = True.
+
+    This is non-destructive: all alerts, urination events, and AI insights
+    are fully preserved. The patient simply disappears from the active list.
+
+    Returns None if the patient does not exist.
+    """
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if patient is None:
+        return None
+
+    patient.is_archived = True
+    db.commit()
+    return get_patient_by_id(db, patient_id)
 
 
 # ================================================================
@@ -183,13 +300,21 @@ def get_dashboard_stats(db: Session) -> dict:
                               bucket by device_status.
     """
 
-    # ── 1. Total patients ──────────────────────────────────────
-    total_patients: int = db.query(func.count(Patient.id)).scalar() or 0
+    # ── 1. Total active patients ────────────────────────────────
+    # Archived patients are excluded from all dashboard KPIs.
+    total_patients: int = (
+        db.query(func.count(Patient.id))
+        .filter(Patient.is_archived == False)        # noqa: E712
+        .scalar()
+        or 0
+    )
 
-    # ── 2. Active (unresolved) alerts ─────────────────────────
+    # ── 2. Active (unresolved) alerts ──────────────────────────
+    # Only count alerts for non-archived patients.
     active_alerts: int = (
         db.query(func.count(Alert.id))
-        .filter(Alert.resolved == False)           # noqa: E712
+        .join(Patient, Alert.patient_id == Patient.id)
+        .filter(Alert.resolved == False, Patient.is_archived == False)  # noqa: E712
         .scalar()
         or 0
     )

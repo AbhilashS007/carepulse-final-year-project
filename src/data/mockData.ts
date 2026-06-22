@@ -7,6 +7,8 @@ export type DeviceStatus = 'Online' | 'Offline' | 'Maintenance';
 export type AlertSeverity = 'Critical' | 'Warning' | 'Info';
 export type AlertType = 'High Wetness' | 'Low Battery' | 'Device Offline' | 'Diaper Changed' | 'Check Required';
 export type RiskLevel = 'Low' | 'Moderate' | 'High' | 'Critical';
+// Disease severity — controlled enum matching backend disease_severity field
+export type DiseaseSeverity = 'mild' | 'moderate' | 'severe' | 'critical';
 
 export interface Patient {
   id: string;
@@ -29,6 +31,12 @@ export interface Patient {
   condition: string;
   caregiver: string;
   notes: string;
+  // ── Phase 1: Management fields ─────────────────────────────────
+  isArchived?: boolean;
+  // Disease profile (Gemini Phase 2 readiness — all optional)
+  disease?: string;
+  diseaseSeverity?: DiseaseSeverity;
+  diagnosisDate?: string;   // ISO date "YYYY-MM-DD"
 }
 
 export interface Alert {
@@ -77,13 +85,17 @@ export interface AIInsight {
   patientId: string;
   patientName: string;
   age: number;
+  disease?: string;
+  diseaseSeverity?: DiseaseSeverity;
   riskScore: number;
   riskLevel: RiskLevel;
   trend: string;
   trendDirection: 'up' | 'down' | 'stable';
   trendPercent: number;
   insight: string;
+  riskExplanation?: string;
   recommendation: string;
+  monitoringAdvice?: string;
   generatedAt: string;
   confidence: number;
   tags: string[];

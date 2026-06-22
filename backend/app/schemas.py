@@ -15,7 +15,7 @@ constructed directly from SQLAlchemy ORM objects (orm_mode in Pydantic v1).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -49,6 +49,33 @@ class PatientBase(_Base):
     device_id:      str = Field(..., min_length=3,  max_length=50,   example="CP-DEV-001")
     notes:          Optional[str] = Field(None, max_length=2000, example="UTI history. Requires frequent monitoring.")
 
+    # ── Disease Profile ─────────────────────────────────────
+    # Optional structured fields for disease-aware AI (Phase 2 Gemini readiness).
+    # All three are optional so existing patients without disease data remain valid.
+    disease: Optional[str] = Field(
+        None, max_length=200,
+        example="Chronic Kidney Disease",
+        description="Canonical disease name consumed by the AI Clinical Insights engine"
+    )
+    disease_severity: Optional[str] = Field(
+        None, max_length=20,
+        example="severe",
+        description="One of: mild | moderate | severe | critical"
+    )
+    diagnosis_date: Optional[date] = Field(
+        None,
+        example="2024-03-15",
+        description="ISO date of formal diagnosis — enables disease_duration_days in AI prompts"
+    )
+
+    @field_validator("disease_severity")
+    @classmethod
+    def validate_disease_severity(cls, v: Optional[str]) -> Optional[str]:
+        allowed = {"mild", "moderate", "severe", "critical"}
+        if v is not None and v not in allowed:
+            raise ValueError(f"disease_severity must be one of {allowed}")
+        return v
+
 
 class PatientCreate(PatientBase):
     """Schema for POST /patients — all fields required."""
@@ -73,11 +100,13 @@ class PatientUpdate(_Base):
 class PatientOut(PatientBase):
     """
     Schema for GET responses.
-    Includes the auto-generated primary key and timestamps.
+    Includes the auto-generated primary key, timestamps, archive flag,
+    and nested relationships.
     """
-    id:         int
-    created_at: datetime
-    updated_at: datetime
+    id:          int
+    is_archived: bool
+    created_at:  datetime
+    updated_at:  datetime
 
     # Nested relationships — optional (only populated when explicitly loaded)
     alerts:           list["AlertOut"]          = []
@@ -89,17 +118,23 @@ class PatientSummaryOut(_Base):
     """
     Lightweight patient schema for list endpoints (no nested relations).
     Used in the Dashboard and Patients table to keep response size small.
+    Includes archive flag and disease profile so the frontend can filter
+    and display disease badges without a second request.
     """
-    id:             int
-    name:           str
-    age:            int
-    ward:           str
-    room:           str
-    condition:      str
-    caregiver_name: str
-    device_id:      str
-    created_at:     datetime
-    updated_at:     datetime
+    id:               int
+    name:             str
+    age:              int
+    ward:             str
+    room:             str
+    condition:        str
+    caregiver_name:   str
+    device_id:        str
+    is_archived:      bool
+    disease:          Optional[str]
+    disease_severity: Optional[str]
+    diagnosis_date:   Optional[date]
+    created_at:       datetime
+    updated_at:       datetime
 
 
 # ================================================================
@@ -227,7 +262,9 @@ class AIInsightBase(_Base):
     )
     trend_percent:   float = Field(..., ge=0.0, example=18.0)
     insight_text:    str   = Field(..., min_length=10, example="Urination frequency increased by 18%...")
+    risk_explanation: Optional[str] = Field(None, example="Risk is elevated due to CKD.")
     recommendation:  str   = Field(..., min_length=10, example="Monitor hydration levels...")
+    monitoring_advice: Optional[str] = Field(None, example="Check output every 4 hours.")
     confidence:      float = Field(..., ge=0.0, le=100.0, example=87.0)
     tags:            Optional[str] = Field(
         None, max_length=500,
@@ -268,7 +305,9 @@ class AIInsightUpdate(_Base):
     trend_direction: Optional[str]   = None
     trend_percent:   Optional[float] = Field(None, ge=0.0)
     insight_text:    Optional[str]   = Field(None, min_length=10)
+    risk_explanation: Optional[str]   = None
     recommendation:  Optional[str]   = Field(None, min_length=10)
+    monitoring_advice: Optional[str]  = None
     confidence:      Optional[float] = Field(None, ge=0.0, le=100.0)
     tags:            Optional[str]   = Field(None, max_length=500)
 
@@ -277,6 +316,8 @@ class AIInsightOut(AIInsightBase):
     """Schema for GET /ai-insights responses."""
     id:         int
     created_at: datetime
+    disease:    Optional[str] = None
+    disease_severity: Optional[str] = None
 
 
 # ================================================================

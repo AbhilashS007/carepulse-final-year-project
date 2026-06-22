@@ -93,6 +93,11 @@ function InsightCard({ insight }: { insight: AIInsight }) {
           <div>
             <h3 className="font-bold text-gray-900">{insight.patientName}</h3>
             <p className="text-xs text-gray-500">Age {insight.age} · Patient ID: {insight.patientId}</p>
+            {insight.disease && (
+              <p className="text-xs font-semibold text-primary-600 mt-0.5">
+                {insight.disease} {insight.diseaseSeverity ? `(${insight.diseaseSeverity})` : ''}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -120,15 +125,23 @@ function InsightCard({ insight }: { insight: AIInsight }) {
         </div>
       </div>
 
-      {/* Insight text */}
+      {/* Insight text & Risk Explanation */}
       <div className="mb-3">
         <div className="flex items-center gap-1.5 mb-2">
           <Sparkles className="w-4 h-4 text-purple-600" />
-          <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">AI Insight</p>
+          <p className="text-xs font-bold text-gray-700 uppercase tracking-wide">Clinical Summary</p>
         </div>
-        <p className={`text-sm text-gray-600 leading-relaxed ${!expanded ? 'line-clamp-3' : ''}`}>
-          {insight.insight}
-        </p>
+        <div className={`space-y-3 ${!expanded ? 'line-clamp-3' : ''}`}>
+          <p className="text-sm text-gray-600 leading-relaxed">
+            {insight.insight}
+          </p>
+          {insight.riskExplanation && (
+            <div>
+              <p className="text-xs font-bold text-gray-700 mb-1">Risk Explanation</p>
+              <p className="text-sm text-gray-600 leading-relaxed">{insight.riskExplanation}</p>
+            </div>
+          )}
+        </div>
         <button
           onClick={() => setExpanded(!expanded)}
           className="flex items-center gap-1 text-xs text-primary-600 font-semibold mt-1.5 hover:text-primary-700 transition-colors"
@@ -141,7 +154,7 @@ function InsightCard({ insight }: { insight: AIInsight }) {
         </button>
       </div>
 
-      {/* Recommendation */}
+      {/* Recommendation & Monitoring Advice */}
       <div className={`rounded-xl p-3 border mb-4 ${
         insight.riskLevel === 'Critical' ? 'bg-red-50 border-red-200' :
         insight.riskLevel === 'High' ? 'bg-orange-50 border-orange-200' :
@@ -154,9 +167,20 @@ function InsightCard({ insight }: { insight: AIInsight }) {
           ) : (
             <AlertTriangle className="w-4 h-4 text-amber-600" />
           )}
-          <p className="text-xs font-bold text-gray-700">Recommendation</p>
+          <p className="text-xs font-bold text-gray-700">Action Plan</p>
         </div>
-        <p className="text-xs text-gray-600 leading-relaxed">{insight.recommendation}</p>
+        <div className="space-y-2 mt-2">
+          <div>
+            <p className="text-xs font-bold text-gray-700 mb-0.5">Recommendation</p>
+            <p className="text-xs text-gray-600 leading-relaxed">{insight.recommendation}</p>
+          </div>
+          {insight.monitoringAdvice && (
+            <div>
+              <p className="text-xs font-bold text-gray-700 mb-0.5">Monitoring Advice</p>
+              <p className="text-xs text-gray-600 leading-relaxed">{insight.monitoringAdvice}</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Tags + Timestamp */}

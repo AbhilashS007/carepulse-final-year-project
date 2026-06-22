@@ -2,6 +2,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import patients, alerts, analytics, ai_insights, auth
+from app.database import engine
+from app.migration_utils import run_migrations
+
+# ── Apply DB column migrations on startup ─────────────────────
+# Adds new columns to carepulse.db without data loss.
+# Safe to run on every restart — existing columns are silently skipped.
+run_migrations(engine)
 
 # Create FastAPI application
 app = FastAPI(
