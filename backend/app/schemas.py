@@ -414,3 +414,64 @@ class TokenData(_Base):
 # Required because PatientOut references AlertOut, UrinationEventOut,
 # and AIInsightOut which are defined after it.
 PatientOut.model_rebuild()
+
+
+# ================================================================
+# GEMINI CLINICAL REPORT SCHEMAS (Phase 3)
+# ================================================================
+
+class GeminiReportOut(_Base):
+    """
+    Full clinical report response combining Rule Engine metrics
+    and Gemini-generated clinical narratives.
+
+    The Rule Engine fields are the authoritative source of truth.
+    Gemini fields are narrative-only — they must never contradict
+    or recalculate any Rule Engine value.
+    """
+
+    # ── Patient Metadata ──
+    patient_id:         int
+    patient_name:       str
+    patient_age:        int
+    patient_ward:       str
+    patient_room:       str
+    disease:            Optional[str] = None
+    disease_severity:   Optional[str] = None
+    diagnosis_duration: Optional[str] = None
+
+    # ── Rule Engine Fields (Source of Truth) ──
+    risk_score:                    int
+    risk_level:                    str
+    trend_direction:               str
+    trend_percent:                 float
+    confidence:                    float
+    rule_engine_insight:           str
+    rule_engine_risk_explanation:  Optional[str] = None
+    rule_engine_recommendation:    str
+    rule_engine_monitoring:        Optional[str] = None
+
+    # ── Telemetry Summary ──
+    telemetry_event_count:    int   = 0
+    telemetry_avg_wetness:    float = 0.0
+    telemetry_max_wetness:    float = 0.0
+    telemetry_avg_daily_freq: float = 0.0
+
+    # ── Alert Summary ──
+    alert_active_count:    int = 0
+    alert_critical_active: int = 0
+    alert_total_7d:        int = 0
+
+    # ── Gemini Narratives ──
+    clinical_summary:         str = ""
+    caregiver_recommendation: str = ""
+    nursing_notes:            str = ""
+    monitoring_plan:          str = ""
+    priority_actions:         str = ""
+    patient_explanation:      str = ""
+
+    # ── Report Metadata ──
+    generated_at:           str   = ""
+    generated_by_risk:      str   = "CarePulse Rule Engine (Level 3)"
+    generated_by_narrative: str   = "Google Gemini 2.0 Flash"
+

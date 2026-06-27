@@ -26,6 +26,7 @@ import {
   History,
   Stethoscope,
   RefreshCw,
+  FileText,
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar,
@@ -43,6 +44,7 @@ import { getPatients, getPatientDetail, regenerateInsight } from '../services/ap
 import PatientFormModal  from '../components/patients/PatientFormModal';
 import ArchiveConfirmDialog from '../components/patients/ArchiveConfirmDialog';
 import PatientTimeline  from '../components/patients/PatientTimeline';
+import GeminiReportModal from '../components/patients/GeminiReportModal';
 
 // ── Types ──────────────────────────────────────────────────────
 type PatientDetailData = Awaited<ReturnType<typeof getPatientDetail>>;
@@ -146,6 +148,7 @@ function PatientDetailPanel({
   const [detailErr, setDetailErr] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'analytics' | 'timeline'>('analytics');
   const [regenerating, setRegenerating] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const loadDetail = () => {
     setDetail(null);
@@ -517,6 +520,28 @@ function PatientDetailPanel({
               <RefreshCw className={`w-3.5 h-3.5 ${regenerating ? 'animate-spin' : ''}`} />
               {regenerating ? 'Generating New Insight...' : 'Regenerate AI Insight'}
             </button>
+
+            {/* ══ 6. Generate Clinical Report Button (Phase 3) ══ */}
+            <button
+              onClick={() => setReportOpen(true)}
+              className="w-full flex items-center justify-center gap-2 py-2.5 mt-2
+                         rounded-xl border border-purple-200
+                         bg-gradient-to-r from-indigo-50 to-purple-50
+                         text-purple-700
+                         text-xs font-semibold hover:from-indigo-100 hover:to-purple-100
+                         transition-all active:scale-[0.98]"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Generate Clinical Report
+            </button>
+
+            {/* Gemini Clinical Report Modal */}
+            <GeminiReportModal
+              patientId={patient.id}
+              patientName={patient.name}
+              open={reportOpen}
+              onClose={() => setReportOpen(false)}
+            />
           </div>
         )}
 

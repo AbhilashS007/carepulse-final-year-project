@@ -549,3 +549,99 @@ export const regenerateInsight = async (patientId: string): Promise<any> => {
   const resp = await api.post(`/ai-insights/generate/${numericId}`);
   return resp.data;
 };
+
+
+// ================================================================
+// GEMINI CLINICAL INTELLIGENCE (Phase 3)
+// ================================================================
+
+export interface GeminiReport {
+  // Patient metadata
+  patientId: number;
+  patientName: string;
+  patientAge: number;
+  patientWard: string;
+  patientRoom: string;
+  disease: string | null;
+  diseaseSeverity: string | null;
+  diagnosisDuration: string | null;
+
+  // Rule Engine fields (source of truth)
+  riskScore: number;
+  riskLevel: string;
+  trendDirection: string;
+  trendPercent: number;
+  confidence: number;
+  ruleEngineInsight: string;
+  ruleEngineRiskExplanation: string | null;
+  ruleEngineRecommendation: string;
+  ruleEngineMonitoring: string | null;
+
+  // Telemetry summary
+  telemetryEventCount: number;
+  telemetryAvgWetness: number;
+  telemetryMaxWetness: number;
+  telemetryAvgDailyFreq: number;
+
+  // Alert summary
+  alertActiveCount: number;
+  alertCriticalActive: number;
+  alertTotal7d: number;
+
+  // Gemini narratives
+  clinicalSummary: string;
+  caregiverRecommendation: string;
+  nursingNotes: string;
+  monitoringPlan: string;
+  priorityActions: string;
+  patientExplanation: string;
+
+  // Report metadata
+  generatedAt: string;
+  generatedByRisk: string;
+  generatedByNarrative: string;
+}
+
+export const generateGeminiReport = async (patientId: string): Promise<GeminiReport> => {
+  const numericId = parseInt(patientId.replace(/\D/g, ''), 10);
+  const resp = await api.post(`/gemini/report/${numericId}`, null, {
+    timeout: 30000, // 30s timeout for Gemini API calls
+  });
+  const d = resp.data;
+  return {
+    patientId: d.patient_id,
+    patientName: d.patient_name,
+    patientAge: d.patient_age,
+    patientWard: d.patient_ward,
+    patientRoom: d.patient_room,
+    disease: d.disease,
+    diseaseSeverity: d.disease_severity,
+    diagnosisDuration: d.diagnosis_duration,
+    riskScore: d.risk_score,
+    riskLevel: mapRiskLevel(d.risk_level),
+    trendDirection: d.trend_direction,
+    trendPercent: d.trend_percent,
+    confidence: d.confidence,
+    ruleEngineInsight: d.rule_engine_insight,
+    ruleEngineRiskExplanation: d.rule_engine_risk_explanation,
+    ruleEngineRecommendation: d.rule_engine_recommendation,
+    ruleEngineMonitoring: d.rule_engine_monitoring,
+    telemetryEventCount: d.telemetry_event_count,
+    telemetryAvgWetness: d.telemetry_avg_wetness,
+    telemetryMaxWetness: d.telemetry_max_wetness,
+    telemetryAvgDailyFreq: d.telemetry_avg_daily_freq,
+    alertActiveCount: d.alert_active_count,
+    alertCriticalActive: d.alert_critical_active,
+    alertTotal7d: d.alert_total_7d,
+    clinicalSummary: d.clinical_summary,
+    caregiverRecommendation: d.caregiver_recommendation,
+    nursingNotes: d.nursing_notes,
+    monitoringPlan: d.monitoring_plan,
+    priorityActions: d.priority_actions,
+    patientExplanation: d.patient_explanation,
+    generatedAt: d.generated_at,
+    generatedByRisk: d.generated_by_risk,
+    generatedByNarrative: d.generated_by_narrative,
+  };
+};
+

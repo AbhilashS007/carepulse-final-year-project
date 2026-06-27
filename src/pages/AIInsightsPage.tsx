@@ -13,10 +13,12 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  FileText,
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { type AIInsight, getRiskColor } from '../data/mockData';
 import { getAIInsights, regenerateInsight } from '../services/api';
+import GeminiReportModal from '../components/patients/GeminiReportModal';
 
 function RiskGauge({ score }: { score: number }) {
   const clampedScore = Math.max(0, Math.min(100, score));
@@ -64,6 +66,7 @@ function RiskGauge({ score }: { score: number }) {
 function InsightCard({ insight, onRegenerated }: { insight: AIInsight; onRegenerated: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const handleRegenerate = async () => {
     setRegenerating(true);
@@ -212,6 +215,16 @@ function InsightCard({ insight, onRegenerated }: { insight: AIInsight; onRegener
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setReportOpen(true)}
+            className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full
+                       bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700
+                       hover:from-indigo-200 hover:to-purple-200
+                       transition-all active:scale-95"
+          >
+            <FileText className="w-3 h-3" />
+            Generate Clinical Report
+          </button>
+          <button
             onClick={handleRegenerate}
             disabled={regenerating}
             className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full
@@ -228,6 +241,14 @@ function InsightCard({ insight, onRegenerated }: { insight: AIInsight; onRegener
           </div>
         </div>
       </div>
+
+      {/* Gemini Clinical Report Modal */}
+      <GeminiReportModal
+        patientId={insight.patientId}
+        patientName={insight.patientName}
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+      />
     </div>
   );
 }
