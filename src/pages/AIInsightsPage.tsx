@@ -259,22 +259,24 @@ export default function AIInsightsPage() {
   const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'risk' | 'trend'>('risk');
 
-  const loadInsights = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const loadInsights = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+    if (showLoading) setError(null);
     try {
       const data = await getAIInsights();
       setInsightsList(data);
     } catch (err: any) {
       console.error('Error loading insights:', err);
-      setError(err?.message || 'Failed to connect to the CarePulse AI Insight services.');
+      if (showLoading) setError(err?.message || 'Failed to connect to the CarePulse AI Insight services.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     loadInsights();
+    const interval = setInterval(() => loadInsights(false), 10000);
+    return () => clearInterval(interval);
   }, [loadInsights]);
 
   if (loading) {

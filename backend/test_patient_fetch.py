@@ -1,0 +1,1 @@
+import time, sys; sys.path.append('.'); from app.database import SessionLocal; from app.crud import get_patient_by_id; db = SessionLocal(); start = time.time(); p = get_patient_by_id(db, 10); end = time.time(); print(f'Fetched patient {p.id} with {len(p.alerts)} alerts, {len(p.urination_events)} events, {len(p.ai_insights)} insights in {end-start:.3f} seconds'); db.close()  

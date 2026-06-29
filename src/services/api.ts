@@ -215,7 +215,7 @@ export const getPatientDetail = async (patientId: string): Promise<{
   timelineEvents: TimelineEvent[];
 }> => {
   // Extract numeric id from "P001" -> 1
-  const numericId = parseInt(patientId.replace(/\D/g, ''), 10);
+  const numericId = parseInt(String(patientId).replace(/\D/g, ''), 10);
   const resp = await api.get(`/patients/${numericId}`);
   const data = resp.data;
 
@@ -545,7 +545,7 @@ export const getAIInsights = async (): Promise<any[]> => {
 };
 
 export const regenerateInsight = async (patientId: string): Promise<any> => {
-  const numericId = parseInt(patientId.replace(/\D/g, ''), 10);
+  const numericId = parseInt(String(patientId).replace(/\D/g, ''), 10);
   const resp = await api.post(`/ai-insights/generate/${numericId}`);
   return resp.data;
 };
@@ -603,7 +603,7 @@ export interface GeminiReport {
 }
 
 export const generateGeminiReport = async (patientId: string): Promise<GeminiReport> => {
-  const numericId = parseInt(patientId.replace(/\D/g, ''), 10);
+  const numericId = parseInt(String(patientId).replace(/\D/g, ''), 10);
   const resp = await api.post(`/gemini/report/${numericId}`, null, {
     timeout: 30000, // 30s timeout for Gemini API calls
   });

@@ -25,7 +25,7 @@ import {
   ArrowDown,
   AlertTriangle,
 } from 'lucide-react';
-import { weeklyAnalytics } from '../data/mockData';
+
 import {
   getWetnessTrend,
   getUrinationFrequency,
@@ -288,44 +288,6 @@ export default function AnalyticsPage() {
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-primary-600" /><span className="text-xs text-gray-500">Actual Events</span></div>
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-indigo-100" /><span className="text-xs text-gray-500">7-Day Average</span></div>
           </div>
-        </div>
-
-        {/* Weekly Analytics Line */}
-        <div className="cp-card p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="font-bold text-gray-900">Weekly Patient Comparison</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Events per week · Top 3 patients</p>
-            </div>
-            <TrendingUp className="w-5 h-5 text-gray-300" />
-          </div>
-          <ResponsiveContainer width="100%" height={230}>
-            <LineChart data={weeklyAnalytics}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis
-                dataKey="week"
-                tick={{ fontSize: 10, fill: '#94a3b8' }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 10, fill: '#94a3b8' }}
-                tickLine={false}
-                axisLine={false}
-                width={30}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend
-                wrapperStyle={{ fontSize: '11px', marginTop: '8px' }}
-                iconType="circle"
-                iconSize={8}
-              />
-              <Line type="monotone" dataKey="patientA" name="M. Chen" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 4, fill: '#2563eb', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
-              <Line type="monotone" dataKey="patientB" name="A. Mbeki" stroke="#0891b2" strokeWidth={2.5} dot={{ r: 4, fill: '#0891b2', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
-              <Line type="monotone" dataKey="patientC" name="B. Fontaine" stroke="#7c3aed" strokeWidth={2.5} dot={{ r: 4, fill: '#7c3aed', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
-              <Line type="monotone" dataKey="average" name="Ward Avg" stroke="#d1d5db" strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
         </div>
       </div>
 

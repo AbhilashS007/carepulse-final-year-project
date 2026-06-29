@@ -1,1 +1,1 @@
-import sqlite3; db = sqlite3.connect('carepulse.db'); print(db.execute('SELECT alert_type, severity, resolved FROM alerts WHERE patient_id=1 ORDER BY id DESC LIMIT 2').fetchall())  
+import sqlite3; db = sqlite3.connect('carepulse.db'); print(db.execute('SELECT id, wetness_percent, recorded_at FROM urination_events WHERE patient_id=10 ORDER BY id DESC LIMIT 5').fetchall())  

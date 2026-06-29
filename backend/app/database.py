@@ -27,6 +27,14 @@ engine = create_engine(
     echo=False,
 )
 
+from sqlalchemy import event
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.close()
+
 # ── Session Factory ───────────────────────────────────────────
 # autocommit=False: transactions must be committed manually.
 # autoflush=False:  SQLAlchemy will not flush automatically

@@ -94,37 +94,26 @@ export default function AlertsPage() {
   const [filterType, setFilterType] = useState<string>('All');
   const [showResolved, setShowResolved] = useState(true);
 
-  const handleTestNotification = () => {
-    const mockAlert = {
-      id: `TEST-${Date.now()}`,
-      patientId: 'P010',
-      patientName: 'Arthur Mbeki',
-      type: 'High Wetness',
-      severity: 'Critical',
-      message: 'TEST ALERT: Critical wetness detected (Arthur Mbeki).',
-      timestamp: new Date().toISOString(),
-      resolved: false,
-      deviceId: 'CP-DEV-010',
-    };
-    window.dispatchEvent(new CustomEvent('cp-test-alert', { detail: mockAlert }));
-  };
 
-  const loadAlerts = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+
+  const loadAlerts = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+    if (showLoading) setError(null);
     try {
       const data = await getAlerts();
       setAlertsList(data);
     } catch (err: any) {
       console.error('Error loading alerts:', err);
-      setError(err?.message || 'Failed to connect to the alerts database service.');
+      if (showLoading) setError(err?.message || 'Failed to connect to the alerts database service.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     loadAlerts();
+    const interval = setInterval(() => loadAlerts(false), 10000);
+    return () => clearInterval(interval);
   }, [loadAlerts]);
 
   if (loading) {
@@ -179,13 +168,6 @@ export default function AlertsPage() {
             {activeAlerts.length} active · {resolvedAlerts.length} resolved today
           </p>
         </div>
-        <button
-          onClick={handleTestNotification}
-          className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-semibold shadow transition-all active:scale-95 flex items-center gap-1.5"
-        >
-          <Bell className="w-3.5 h-3.5" />
-          Test Notification
-        </button>
       </div>
 
       {/* Summary Cards */}

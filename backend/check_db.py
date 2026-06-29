@@ -1,0 +1,1 @@
+import sqlite3; db = sqlite3.connect('carepulse.db'); print('Patients:', db.execute('SELECT COUNT(*) FROM patients').fetchone()[0]); print('Telemetry:', db.execute('SELECT COUNT(*) FROM telemetry').fetchone()[0]); print('Alerts:', db.execute('SELECT COUNT(*) FROM alerts').fetchone()[0]);  

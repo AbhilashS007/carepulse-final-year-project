@@ -150,25 +150,27 @@ function PatientDetailPanel({
   const [regenerating, setRegenerating] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
 
-  const loadDetail = () => {
-    setDetail(null);
-    setDetailErr(null);
-    setLoading(true);
+  const loadDetail = useCallback((showLoading = true) => {
+    if (showLoading) {
+      setLoading(true);
+      setDetailErr(null);
+    }
     getPatientDetail(patient.id)
-      .then(d => { setDetail(d); setLoading(false); })
-      .catch(e => { setDetailErr(e?.message || 'Failed to load analytics.'); setLoading(false); });
-  };
+      .then(d => { 
+        setDetail(d); 
+        if (showLoading) setLoading(false); 
+      })
+      .catch(e => { 
+        setDetailErr(e?.message || 'Failed to load analytics.'); 
+        if (showLoading) setLoading(false); 
+      });
+  }, [patient.id]);
 
   useEffect(() => {
-    let cancelled = false;
-    setDetail(null);
-    setDetailErr(null);
-    setLoading(true);
-    getPatientDetail(patient.id)
-      .then(d => { if (!cancelled) { setDetail(d); setLoading(false); } })
-      .catch(e => { if (!cancelled) { setDetailErr(e?.message || 'Failed to load analytics.'); setLoading(false); } });
-    return () => { cancelled = true; };
-  }, [patient.id]);
+    loadDetail(true);
+    const interval = setInterval(() => loadDetail(false), 5000);
+    return () => clearInterval(interval);
+  }, [loadDetail]);
 
   const handleRegenerate = async () => {
     setRegenerating(true);
@@ -610,26 +612,31 @@ export default function PatientsPage() {
     }
   }, [patientsList, selectId]);
 
-  const loadPatients = useCallback(async (filter: typeof archiveFilter = archiveFilter) => {
-    setLoading(true);
-    setError(null);
+  const loadPatients = useCallback(async (filter: typeof archiveFilter = archiveFilter, showLoading = true) => {
+    if (showLoading) setLoading(true);
+    if (showLoading) setError(null);
     try {
       const data = await getPatients(filter);
       setPatientsList(data);
       // Sync selected patient with new data if open
-      if (selectedPatient) {
-        const updated = data.find(p => p.id === selectedPatient.id);
-        if (updated) setSelectedPatient(updated);
-      }
+      setSelectedPatient(prev => {
+        if (!prev) return prev;
+        const updated = data.find(p => p.id === prev.id);
+        return updated || prev;
+      });
     } catch (err: any) {
       console.error('Error loading patients:', err);
-      setError(err?.message || 'Failed to fetch patients telemetry records.');
+      if (showLoading) setError(err?.message || 'Failed to fetch patients telemetry records.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
-  }, [selectedPatient, archiveFilter]);
+  }, [archiveFilter]);
 
-  useEffect(() => { loadPatients(archiveFilter); }, [archiveFilter]);
+  useEffect(() => {
+    loadPatients(archiveFilter);
+    const interval = setInterval(() => loadPatients(archiveFilter, false), 10000);
+    return () => clearInterval(interval);
+  }, [archiveFilter, loadPatients]);
 
   const handleSort = (key: keyof Patient) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');

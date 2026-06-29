@@ -25,7 +25,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import func, text
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models import AIInsight, Alert, Patient, Telemetry, UrinationEvent
 from app import schemas
@@ -113,9 +113,9 @@ def get_patient_by_id(db: Session, patient_id: int) -> Optional[Patient]:
     return (
         db.query(Patient)
         .options(
-            joinedload(Patient.alerts),
-            joinedload(Patient.urination_events),
-            joinedload(Patient.ai_insights),
+            selectinload(Patient.alerts),
+            selectinload(Patient.urination_events),
+            selectinload(Patient.ai_insights),
         )
         .filter(Patient.id == patient_id)
         .first()

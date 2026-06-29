@@ -70,7 +70,7 @@ def create_telemetry(
     ```
     """
     record = crud.create_telemetry(db, data)
-    background_tasks.add_task(process_telemetry_packet, db, record.id)
+    background_tasks.add_task(process_telemetry_packet, record.id)
     return record
 
 

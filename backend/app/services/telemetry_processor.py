@@ -12,9 +12,10 @@ from sqlalchemy.orm import Session
 from app.models import Telemetry, UrinationEvent, Alert, Patient, AIInsight
 from app.crud import _classify_wetness
 from app.services.device_mapper import get_patient_by_device_id
-from app.services import disease_ai
+from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 # ── Configuration Thresholds ────────────────────────────────────────
 
@@ -40,161 +41,168 @@ def log_step(step: str, details: str = ""):
     logger.info(msg)
 
 
-def process_telemetry_packet(db: Session, telemetry_id: int) -> None:
+def process_telemetry_packet(telemetry_id: int) -> None:
     """
     Main processing pipeline for a single telemetry packet.
     """
-    log_step("Telemetry Received", f"ID={telemetry_id}")
-    
-    telemetry = db.query(Telemetry).filter(Telemetry.id == telemetry_id).first()
-    if not telemetry:
-        logger.error(f"Telemetry ID {telemetry_id} not found.")
-        return
+    from app.services import disease_ai
+    db = SessionLocal()
+    try:
+        log_step("Telemetry Received", f"ID={telemetry_id}")
+        
+        telemetry = db.query(Telemetry).filter(Telemetry.id == telemetry_id).first()
+        if not telemetry:
+            logger.error(f"Telemetry ID {telemetry_id} not found.")
+            return
 
-    # 1. Device Mapping
-    patient = get_patient_by_device_id(db, telemetry.device_id)
-    if not patient:
-        log_step("Patient Matched", "FAIL: No active patient for device.")
+        # 1. Device Mapping
+        patient = get_patient_by_device_id(db, telemetry.device_id)
+        if not patient:
+            log_step("Patient Matched", "FAIL: No active patient for device.")
+            telemetry.processed = True
+            db.commit()
+            return
+            
+        log_step("Patient Matched", f"Patient={patient.id} ({patient.name})")
+
+        # We use recorded_at = telemetry.created_at or esp32_timestamp
+        record_time = telemetry.esp32_timestamp or telemetry.created_at
+        
+        # 2. Clinical Event (UrinationEvent Deduplication)
+        latest_event = db.query(UrinationEvent).filter(
+            UrinationEvent.patient_id == patient.id
+        ).order_by(UrinationEvent.recorded_at.desc()).first()
+
+        create_event = False
+        
+        if not latest_event:
+            create_event = True
+        else:
+            time_diff = (record_time - latest_event.recorded_at).total_seconds()
+            wetness_diff = abs(telemetry.wetness_percent - latest_event.wetness_percent)
+            
+            if wetness_diff >= WETNESS_CHANGE_THRESHOLD:
+                create_event = True
+            elif telemetry.wetness_percent >= HIGH_WETNESS_THRESHOLD:
+                # Always log high wetness points to capture the peak accurately
+                create_event = True
+            elif time_diff >= MIN_EVENT_INTERVAL_SEC:
+                create_event = True
+
+        event_created = False
+        if create_event:
+            device_status_mapped = "online"
+            new_event = UrinationEvent(
+                patient_id=patient.id,
+                wetness_percent=telemetry.wetness_percent,
+                wetness_level=_classify_wetness(telemetry.wetness_percent),
+                battery_percent=telemetry.battery_percent,
+                device_status=device_status_mapped,
+                recorded_at=record_time
+            )
+            db.add(new_event)
+            event_created = True
+            log_step("Clinical Event", f"Created UrinationEvent (wetness={telemetry.wetness_percent}%)")
+        else:
+            log_step("Clinical Event", "Skipped (Deduplicated)")
+
+        # 3. Alert Evaluation
+        critical_alert_generated = False
+        alerts_changed = False
+        
+        # Check High Wetness Alert
+        active_wetness_alert = db.query(Alert).filter(
+            Alert.patient_id == patient.id,
+            Alert.alert_type == "high_wetness",
+            Alert.resolved == False
+        ).first()
+
+        if telemetry.wetness_percent >= HIGH_WETNESS_THRESHOLD:
+            if not active_wetness_alert:
+                severity = "critical" if telemetry.wetness_percent >= CRITICAL_WETNESS_THRESHOLD else "warning"
+                alert = Alert(
+                    patient_id=patient.id,
+                    alert_type="high_wetness",
+                    severity=severity,
+                    message=f"High wetness detected: {telemetry.wetness_percent}%",
+                )
+                db.add(alert)
+                alerts_changed = True
+                if severity == "critical":
+                    critical_alert_generated = True
+                log_step("Alert Evaluation", f"Created High Wetness Alert ({severity})")
+        else:
+            if active_wetness_alert:
+                active_wetness_alert.resolved = True
+                active_wetness_alert.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                alerts_changed = True
+                log_step("Alert Evaluation", "Resolved High Wetness Alert")
+
+        # Check Low Battery Alert
+        active_battery_alert = db.query(Alert).filter(
+            Alert.patient_id == patient.id,
+            Alert.alert_type == "low_battery",
+            Alert.resolved == False
+        ).first()
+        
+        if telemetry.battery_percent <= LOW_BATTERY_WARNING:
+            if not active_battery_alert:
+                severity = "critical" if telemetry.battery_percent <= LOW_BATTERY_CRITICAL else "warning"
+                alert = Alert(
+                    patient_id=patient.id,
+                    alert_type="low_battery",
+                    severity=severity,
+                    message=f"Low battery detected: {telemetry.battery_percent}%",
+                )
+                db.add(alert)
+                alerts_changed = True
+                if severity == "critical":
+                    critical_alert_generated = True
+                log_step("Alert Evaluation", f"Created Low Battery Alert ({severity})")
+        else:
+            if active_battery_alert and telemetry.battery_percent >= BATTERY_RESOLVE_THRESHOLD:
+                active_battery_alert.resolved = True
+                active_battery_alert.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                alerts_changed = True
+                log_step("Alert Evaluation", "Resolved Low Battery Alert")
+
+        if not alerts_changed:
+            log_step("Alert Evaluation", "No changes")
+
+        # Commit DB to ensure events/alerts exist for AI to query
+        db.commit()
+
+        # 4. AI Update (Cooldown Logic)
+        if event_created or alerts_changed:
+            trigger_ai = True
+            
+            if not critical_alert_generated:
+                latest_insight = db.query(AIInsight).filter(
+                    AIInsight.patient_id == patient.id
+                ).order_by(AIInsight.generated_at.desc()).first()
+                
+                if latest_insight:
+                    diff_sec = (datetime.now() - latest_insight.generated_at).total_seconds()
+                    if diff_sec < AI_REGEN_COOLDOWN_SEC:
+                        trigger_ai = False
+                        log_step("AI Update", f"Skipped (Cooldown active: {int(diff_sec)}s < {AI_REGEN_COOLDOWN_SEC}s)")
+
+            if trigger_ai:
+                try:
+                    disease_ai.generate_insight(db, patient.id)
+                    log_step("AI Update", "Generated new AI Insight")
+                except Exception as e:
+                    log_step("AI Update", f"ERROR: {str(e)}")
+                    logger.error("Failed to generate AI insight", exc_info=True)
+        else:
+            log_step("AI Update", "Skipped (No clinical changes)")
+
+        # 5. Completed
         telemetry.processed = True
         db.commit()
-        return
+        log_step("Completed", "Pipeline finished successfully")
         
-    log_step("Patient Matched", f"Patient={patient.id} ({patient.name})")
-
-    # We use recorded_at = telemetry.created_at or esp32_timestamp
-    record_time = telemetry.esp32_timestamp or telemetry.created_at
-    
-    # 2. Clinical Event (UrinationEvent Deduplication)
-    latest_event = db.query(UrinationEvent).filter(
-        UrinationEvent.patient_id == patient.id
-    ).order_by(UrinationEvent.recorded_at.desc()).first()
-
-    create_event = False
-    
-    if not latest_event:
-        create_event = True
-    else:
-        time_diff = (record_time - latest_event.recorded_at).total_seconds()
-        wetness_diff = abs(telemetry.wetness_percent - latest_event.wetness_percent)
-        
-        if wetness_diff >= WETNESS_CHANGE_THRESHOLD:
-            create_event = True
-        elif telemetry.wetness_percent >= HIGH_WETNESS_THRESHOLD:
-            # Always log high wetness points to capture the peak accurately
-            create_event = True
-        elif time_diff >= MIN_EVENT_INTERVAL_SEC:
-            create_event = True
-
-    event_created = False
-    if create_event:
-        device_status_mapped = "online"
-        new_event = UrinationEvent(
-            patient_id=patient.id,
-            wetness_percent=telemetry.wetness_percent,
-            wetness_level=_classify_wetness(telemetry.wetness_percent),
-            battery_percent=telemetry.battery_percent,
-            device_status=device_status_mapped,
-            recorded_at=record_time
-        )
-        db.add(new_event)
-        event_created = True
-        log_step("Clinical Event", f"Created UrinationEvent (wetness={telemetry.wetness_percent}%)")
-    else:
-        log_step("Clinical Event", "Skipped (Deduplicated)")
-
-    # 3. Alert Evaluation
-    critical_alert_generated = False
-    alerts_changed = False
-    
-    # Check High Wetness Alert
-    active_wetness_alert = db.query(Alert).filter(
-        Alert.patient_id == patient.id,
-        Alert.alert_type == "high_wetness",
-        Alert.resolved == False
-    ).first()
-
-    if telemetry.wetness_percent >= HIGH_WETNESS_THRESHOLD:
-        if not active_wetness_alert:
-            severity = "critical" if telemetry.wetness_percent >= CRITICAL_WETNESS_THRESHOLD else "warning"
-            alert = Alert(
-                patient_id=patient.id,
-                alert_type="high_wetness",
-                severity=severity,
-                message=f"High wetness detected: {telemetry.wetness_percent}%",
-            )
-            db.add(alert)
-            alerts_changed = True
-            if severity == "critical":
-                critical_alert_generated = True
-            log_step("Alert Evaluation", f"Created High Wetness Alert ({severity})")
-    else:
-        if active_wetness_alert:
-            active_wetness_alert.resolved = True
-            active_wetness_alert.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
-            alerts_changed = True
-            log_step("Alert Evaluation", "Resolved High Wetness Alert")
-
-    # Check Low Battery Alert
-    active_battery_alert = db.query(Alert).filter(
-        Alert.patient_id == patient.id,
-        Alert.alert_type == "low_battery",
-        Alert.resolved == False
-    ).first()
-    
-    if telemetry.battery_percent <= LOW_BATTERY_WARNING:
-        if not active_battery_alert:
-            severity = "critical" if telemetry.battery_percent <= LOW_BATTERY_CRITICAL else "warning"
-            alert = Alert(
-                patient_id=patient.id,
-                alert_type="low_battery",
-                severity=severity,
-                message=f"Low battery detected: {telemetry.battery_percent}%",
-            )
-            db.add(alert)
-            alerts_changed = True
-            if severity == "critical":
-                critical_alert_generated = True
-            log_step("Alert Evaluation", f"Created Low Battery Alert ({severity})")
-    else:
-        if active_battery_alert and telemetry.battery_percent >= BATTERY_RESOLVE_THRESHOLD:
-            active_battery_alert.resolved = True
-            active_battery_alert.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
-            alerts_changed = True
-            log_step("Alert Evaluation", "Resolved Low Battery Alert")
-
-    if not alerts_changed:
-        log_step("Alert Evaluation", "No changes")
-
-    # Commit DB to ensure events/alerts exist for AI to query
-    db.commit()
-
-    # 4. AI Update (Cooldown Logic)
-    if event_created or alerts_changed:
-        trigger_ai = True
-        
-        if not critical_alert_generated:
-            latest_insight = db.query(AIInsight).filter(
-                AIInsight.patient_id == patient.id
-            ).order_by(AIInsight.generated_at.desc()).first()
-            
-            if latest_insight:
-                diff_sec = (datetime.now() - latest_insight.generated_at).total_seconds()
-                if diff_sec < AI_REGEN_COOLDOWN_SEC:
-                    trigger_ai = False
-                    log_step("AI Update", f"Skipped (Cooldown active: {int(diff_sec)}s < {AI_REGEN_COOLDOWN_SEC}s)")
-
-        if trigger_ai:
-            try:
-                disease_ai.generate_insight(db, patient.id)
-                log_step("AI Update", "Generated new AI Insight")
-            except Exception as e:
-                log_step("AI Update", f"ERROR: {str(e)}")
-                logger.error("Failed to generate AI insight", exc_info=True)
-    else:
-        log_step("AI Update", "Skipped (No clinical changes)")
-
-    # 5. Completed
-    telemetry.processed = True
-    db.commit()
-    log_step("Completed", "Pipeline finished successfully")
-
+    except Exception as e:
+        logger.error(f"Telemetry processing failed: {e}", exc_info=True)
+    finally:
+        db.close()

@@ -61,9 +61,9 @@ export default function DashboardPage() {
   const [alertsList, setAlertsList] = useState<any[]>([]);
   const [trendList, setTrendList] = useState<any[]>([]);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const loadData = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+    if (showLoading) setError(null);
     try {
       const [statsData, patientsData, alertsData, trendData] = await Promise.all([
         getDashboardStats(),
@@ -77,14 +77,16 @@ export default function DashboardPage() {
       setTrendList(trendData);
     } catch (err: any) {
       console.error('Error loading dashboard data:', err);
-      setError(err?.message || 'Unable to connect to the CarePulse API server. Please make sure the backend is running.');
+      if (showLoading) setError(err?.message || 'Unable to connect to the CarePulse API server. Please make sure the backend is running.');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     loadData();
+    const interval = setInterval(() => loadData(false), 10000);
+    return () => clearInterval(interval);
   }, [loadData]);
 
   // ── Phase 4C: Independent telemetry polling (5s) ──────────

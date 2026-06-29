@@ -1,0 +1,1 @@
+import sqlite3; db = sqlite3.connect('carepulse.db'); print('Alerts:', db.execute('SELECT * FROM alerts WHERE patient_id=10').fetchall()); print('AI Insights:', db.execute('SELECT * FROM ai_insights WHERE patient_id=10').fetchall())  
