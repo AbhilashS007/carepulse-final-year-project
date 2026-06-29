@@ -27,7 +27,7 @@ from typing import Optional
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import AIInsight, Alert, Patient, UrinationEvent
+from app.models import AIInsight, Alert, Patient, Telemetry, UrinationEvent
 from app import schemas
 
 
@@ -570,3 +570,58 @@ def get_all_ai_insights(
         .limit(limit)
         .all()
     )
+
+
+# ================================================================
+# TELEMETRY (Phase 4B)
+# ================================================================
+
+def create_telemetry(
+    db: Session,
+    telemetry_data: "schemas.TelemetryCreate",
+) -> Telemetry:
+    """
+    Insert a new telemetry reading from the ESP32 device.
+
+    All fields from the validated schema are persisted, including
+    optional IoT metadata (wifi_rssi, firmware_version, esp32_timestamp).
+    Missing optional fields are stored as NULL.
+    """
+    telemetry = Telemetry(**telemetry_data.model_dump())
+    db.add(telemetry)
+    db.commit()
+    db.refresh(telemetry)
+    return telemetry
+
+
+def get_latest_telemetry(db: Session) -> Optional[Telemetry]:
+    """
+    Return the single most-recent telemetry reading across all devices.
+
+    Returns None if no telemetry has been recorded yet.
+    """
+    return (
+        db.query(Telemetry)
+        .order_by(Telemetry.created_at.desc())
+        .first()
+    )
+
+
+def get_recent_telemetry(
+    db: Session,
+    limit: int = 100,
+) -> list[Telemetry]:
+    """
+    Return the most recent telemetry readings, newest first.
+
+    Parameters
+    ----------
+    limit : Maximum rows to return (default 100).
+    """
+    return (
+        db.query(Telemetry)
+        .order_by(Telemetry.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+

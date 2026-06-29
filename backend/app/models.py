@@ -418,3 +418,64 @@ class User(Base):
 
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email!r} role={self.role!r}>"
+
+
+# ================================================================
+# TABLE 6: telemetry
+# ================================================================
+
+class Telemetry(Base):
+    """
+    Raw ESP32 sensor reading stored as-is from the IoT device.
+
+    This is a standalone table — no FK to patients — so telemetry
+    data can land without requiring a patient record to exist first.
+    The device_id string links readings to a specific ESP32 unit.
+
+    Fields:
+    - moisture_raw:      raw ADC value from the capacitive sensor
+    - wetness_percent:   firmware-computed wetness percentage (0–100)
+    - battery_percent:   remaining battery charge (0–100)
+    - wifi_rssi:         Wi-Fi signal strength in dBm (nullable)
+    - firmware_version:  firmware build identifier (nullable)
+    - esp32_timestamp:   timestamp from the ESP32's RTC/NTP clock (nullable)
+    """
+
+    __tablename__ = "telemetry"
+
+    # Primary key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    # Device identifier — indexed for fast latest-per-device queries
+    device_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+
+    # Sensor readings
+    moisture_raw:    Mapped[int] = mapped_column(Integer, nullable=False)
+    wetness_percent: Mapped[int] = mapped_column(Integer, nullable=False)
+    battery_percent: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # ── IoT Metadata (optional — backward compatible with older firmware) ──
+    wifi_rssi: Mapped[int | None] = mapped_column(
+        Integer, nullable=True,
+        comment="Wi-Fi RSSI signal strength in dBm"
+    )
+    firmware_version: Mapped[str | None] = mapped_column(
+        String(20), nullable=True,
+        comment="ESP32 firmware version identifier"
+    )
+    esp32_timestamp: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True,
+        comment="Timestamp from ESP32 RTC/NTP clock"
+    )
+
+    # When the record was inserted into the database
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False, index=True
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<Telemetry id={self.id} "
+            f"device_id={self.device_id!r} "
+            f"wetness={self.wetness_percent}%>"
+        )

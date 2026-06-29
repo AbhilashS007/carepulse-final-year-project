@@ -475,3 +475,54 @@ class GeminiReportOut(_Base):
     generated_by_risk:      str   = "CarePulse Rule Engine (Level 3)"
     generated_by_narrative: str   = "Google Gemini 2.0 Flash"
 
+
+# ================================================================
+# TELEMETRY SCHEMAS (Phase 4B)
+# ================================================================
+
+class TelemetryCreate(_Base):
+    """
+    Schema for POST /telemetry — validates an incoming ESP32 sensor reading.
+
+    Core fields are required; IoT metadata fields are optional so older
+    firmware that does not send them still works (backward compatible).
+    """
+    device_id:        str = Field(
+        ..., min_length=1, max_length=50,
+        example="ESP32-001",
+        description="Unique identifier of the ESP32 device"
+    )
+    moisture_raw:     int = Field(
+        ..., example=2164,
+        description="Raw ADC value from the capacitive moisture sensor"
+    )
+    wetness_percent:  int = Field(
+        ..., ge=0, le=100, example=70,
+        description="Firmware-computed wetness percentage (0–100)"
+    )
+    battery_percent:  int = Field(
+        ..., ge=0, le=100, example=95,
+        description="Remaining battery charge (0–100)"
+    )
+
+    # ── IoT Metadata (optional) ──────────────────────────────
+    wifi_rssi: int | None = Field(
+        None, example=-53,
+        description="Wi-Fi RSSI signal strength in dBm"
+    )
+    firmware_version: str | None = Field(
+        None, max_length=20, example="1.0.0",
+        description="ESP32 firmware version identifier"
+    )
+    esp32_timestamp: datetime | None = Field(
+        None, example=None,
+        description="Timestamp from the ESP32's RTC/NTP clock"
+    )
+
+
+class TelemetryOut(TelemetryCreate):
+    """Schema for GET /telemetry responses — adds server-side id and timestamp."""
+    id:         int
+    created_at: datetime
+
+

@@ -36,6 +36,30 @@ MIGRATIONS: list[str] = [
 
     # ── Phase 2 Level 3: AI engine provenance ─────────────────
     "ALTER TABLE ai_insights ADD COLUMN generated_by VARCHAR(50) NOT NULL DEFAULT 'rule_engine'",
+
+    # ── Phase 4B: Telemetry table for raw ESP32 sensor data ──
+    # CREATE TABLE IF NOT EXISTS is idempotent — safe on every startup.
+    """CREATE TABLE IF NOT EXISTS telemetry (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id VARCHAR(50) NOT NULL,
+        moisture_raw INTEGER NOT NULL,
+        wetness_percent INTEGER NOT NULL,
+        battery_percent INTEGER NOT NULL,
+        wifi_rssi INTEGER,
+        firmware_version VARCHAR(20),
+        esp32_timestamp DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+    )""",
+    # Indexes for fast latest/recent queries
+    "CREATE INDEX IF NOT EXISTS ix_telemetry_device_id ON telemetry (device_id)",
+    "CREATE INDEX IF NOT EXISTS ix_telemetry_created_at ON telemetry (created_at)",
+
+    # ── Phase 4B Refinement: IoT metadata columns ────────────
+    # ALTER TABLE for databases where the table already exists
+    # without these columns (safe to fail silently if present).
+    "ALTER TABLE telemetry ADD COLUMN wifi_rssi INTEGER",
+    "ALTER TABLE telemetry ADD COLUMN firmware_version VARCHAR(20)",
+    "ALTER TABLE telemetry ADD COLUMN esp32_timestamp DATETIME",
 ]
 
 
