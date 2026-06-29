@@ -60,6 +60,7 @@ MIGRATIONS: list[str] = [
     "ALTER TABLE telemetry ADD COLUMN wifi_rssi INTEGER",
     "ALTER TABLE telemetry ADD COLUMN firmware_version VARCHAR(20)",
     "ALTER TABLE telemetry ADD COLUMN esp32_timestamp DATETIME",
+    "ALTER TABLE telemetry ADD COLUMN processed BOOLEAN NOT NULL DEFAULT 0",
 ]
 
 

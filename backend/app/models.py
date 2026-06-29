@@ -468,6 +468,12 @@ class Telemetry(Base):
         comment="Timestamp from ESP32 RTC/NTP clock"
     )
 
+    # ── Phase 4D: Processing status ───────────────────────────
+    processed: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+        comment="Whether this telemetry has been processed by the Rule Engine"
+    )
+
     # When the record was inserted into the database
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False, index=True

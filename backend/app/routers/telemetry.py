@@ -12,12 +12,13 @@ Endpoints:
     GET    /telemetry/recent   — return recent readings (configurable limit)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas import TelemetryCreate, TelemetryOut
 from app import crud
+from app.services.telemetry_processor import process_telemetry_packet
 
 router = APIRouter(
     prefix="/telemetry",
@@ -39,6 +40,7 @@ router = APIRouter(
 )
 def create_telemetry(
     data: TelemetryCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """
@@ -67,7 +69,9 @@ def create_telemetry(
     }
     ```
     """
-    return crud.create_telemetry(db, data)
+    record = crud.create_telemetry(db, data)
+    background_tasks.add_task(process_telemetry_packet, db, record.id)
+    return record
 
 
 @router.get(
