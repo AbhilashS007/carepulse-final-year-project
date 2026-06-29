@@ -645,3 +645,48 @@ export const generateGeminiReport = async (patientId: string): Promise<GeminiRep
   };
 };
 
+
+// ================================================================
+// TELEMETRY (Phase 4C — Live Dashboard Integration)
+// ================================================================
+
+export interface Telemetry {
+  id:               number;
+  device_id:        string;
+  moisture_raw:     number;
+  wetness_percent:  number;
+  battery_percent:  number;
+  wifi_rssi:        number | null;
+  firmware_version: string | null;
+  esp32_timestamp:  string | null;
+  created_at:       string;
+}
+
+/**
+ * Fetch the single most recent telemetry reading.
+ * Returns null if no telemetry exists yet (404 from backend).
+ */
+export const getLatestTelemetry = async (): Promise<Telemetry | null> => {
+  try {
+    const response = await api.get('/telemetry/latest');
+    return response.data;
+  } catch (err: any) {
+    if (err?.response?.status === 404) return null;
+    throw err;
+  }
+};
+
+/**
+ * Fetch recent telemetry readings, newest first.
+ * @param limit Maximum number of readings to return (default 50).
+ */
+export const getRecentTelemetry = async (limit: number = 50): Promise<Telemetry[]> => {
+  try {
+    const response = await api.get('/telemetry/recent', { params: { limit } });
+    return response.data;
+  } catch (err: any) {
+    if (err?.response?.status === 404) return [];
+    throw err;
+  }
+};
+

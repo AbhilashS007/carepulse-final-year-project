@@ -23,7 +23,7 @@ import {
   YAxis,
   CartesianGrid,
 } from 'recharts';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   getWetnessColor,
   getWetnessBg,
@@ -35,7 +35,11 @@ import {
   getPatients,
   getAlerts,
   getWetnessTrend,
+  getLatestTelemetry,
+  getRecentTelemetry,
 } from '../services/api';
+import type { Telemetry } from '../services/api';
+import LiveTelemetryCard from '../components/dashboard/LiveTelemetryCard';
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -82,6 +86,43 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // ── Phase 4C: Independent telemetry polling (5s) ──────────
+  const [liveTelemetry, setLiveTelemetry] = useState<Telemetry | null>(null);
+  const [recentTelemetryList, setRecentTelemetryList] = useState<Telemetry[]>([]);
+  const [telemetryLoading, setTelemetryLoading] = useState(true);
+  const [telemetryError, setTelemetryError] = useState(false);
+  const telemetryMounted = useRef(true);
+
+  const fetchTelemetry = useCallback(async () => {
+    try {
+      const [latest, recent] = await Promise.all([
+        getLatestTelemetry(),
+        getRecentTelemetry(50),
+      ]);
+      if (telemetryMounted.current) {
+        setLiveTelemetry(latest);
+        setRecentTelemetryList(recent);
+        setTelemetryError(false);
+        setTelemetryLoading(false);
+      }
+    } catch {
+      if (telemetryMounted.current) {
+        setTelemetryError(true);
+        setTelemetryLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    telemetryMounted.current = true;
+    fetchTelemetry();
+    const interval = setInterval(fetchTelemetry, 5000);
+    return () => {
+      telemetryMounted.current = false;
+      clearInterval(interval);
+    };
+  }, [fetchTelemetry]);
 
   if (loading) {
     return (
@@ -161,8 +202,38 @@ export default function DashboardPage() {
   const topPatients = [...patientsList].sort((a, b) => b.riskScore - a.riskScore).slice(0, 6);
   const trendData = trendList.slice(-16);
 
+  // ── Phase 4C: Build live wetness trend from telemetry ────
+  const liveTrendData = recentTelemetryList.length > 0
+    ? [...recentTelemetryList]
+        .reverse()          // oldest first for chart
+        .slice(-20)
+        .map(t => {
+          const d = new Date(t.created_at);
+          return {
+            time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            wetness: t.wetness_percent,
+            threshold: 75,
+          };
+        })
+    : null;
+
+  // Use live telemetry trend if available, otherwise fall back to existing analytics trend
+  const chartData = liveTrendData && liveTrendData.length > 0 ? liveTrendData : trendData;
+  const chartSubtitle = liveTrendData && liveTrendData.length > 0
+    ? `Last ${liveTrendData.length} ESP32 readings`
+    : 'Last 40 readings · Patient avg.';
+
   return (
     <div className="space-y-6 animate-in">
+      {/* ───── Live Telemetry Card (Phase 4C) ───── */}
+      <LiveTelemetryCard
+        telemetry={liveTelemetry}
+        recentTelemetry={recentTelemetryList}
+        loading={telemetryLoading}
+        error={telemetryError}
+        onRefresh={fetchTelemetry}
+      />
+
       {/* ───── KPI Cards ───── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
         {kpiCards.map(({ label, value, icon: Icon, iconBg, trend, trendUp, description }) => (
@@ -197,12 +268,12 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-5">
             <div>
               <h3 className="font-bold text-gray-900">Wetness Trend</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Last 40 readings · Patient avg.</p>
+              <p className="text-xs text-gray-400 mt-0.5">{chartSubtitle}</p>
             </div>
-            <span className="cp-badge-info">Live</span>
+            <span className="cp-badge-info">{liveTrendData ? 'ESP32 Live' : 'Analytics'}</span>
           </div>
           <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={trendData}>
+            <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="wetnessGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#2563eb" stopOpacity={0.15} />
