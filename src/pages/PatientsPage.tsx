@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search,
@@ -40,7 +40,7 @@ import {
   getBatteryColor,
   getRiskColor,
 } from '../data/mockData';
-import { getPatients, getPatientDetail, regenerateInsight } from '../services/api';
+import { getPatients, getPatientDetail, regenerateInsight, performDiaperChange, unarchivePatient } from '../services/api';
 import PatientFormModal  from '../components/patients/PatientFormModal';
 import ArchiveConfirmDialog from '../components/patients/ArchiveConfirmDialog';
 import PatientTimeline  from '../components/patients/PatientTimeline';
@@ -67,19 +67,19 @@ function WetnessBar({ percent }: { percent: number }) {
 }
 
 function DeviceStatusBadge({ status }: { status: Patient['deviceStatus'] }) {
-  const styles = {
+  const styles: Record<string, string> = {
     Online: 'text-green-700 bg-green-100',
     Offline: 'text-red-700 bg-red-100',
     Maintenance: 'text-amber-700 bg-amber-100',
   };
-  const icons = {
+  const icons: Record<string, ReactNode> = {
     Online: <Wifi className="w-3 h-3" />,
     Offline: <WifiOff className="w-3 h-3" />,
     Maintenance: <Wrench className="w-3 h-3" />,
   };
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${styles[status]}`}>
-      {icons[status]}
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${styles[status] || 'text-gray-700 bg-gray-100'}`}>
+      {icons[status] || <WifiOff className="w-3 h-3" />}
       {status}
     </span>
   );
@@ -136,12 +136,13 @@ function DiseaseSeverityBadge({ severity }: { severity: string | undefined }) {
 
 // ── Main detail panel ─────────────────────────────────────────
 function PatientDetailPanel({
-  patient, onClose, onEdit, onArchive,
+  patient, onClose, onEdit, onArchive, onUnarchive
 }: {
   patient:   Patient;
   onClose:   () => void;
   onEdit:    (p: Patient) => void;
   onArchive: (p: Patient) => void;
+  onUnarchive: (p: Patient) => void;
 }) {
   const [detail, setDetail]   = useState<PatientDetailData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -203,8 +204,24 @@ function PatientDetailPanel({
         </button>
       </div>
 
-      {/* ── Action row (Edit / Archive) ── */}
+      {/* ── Action row (Edit / Archive / Diaper) ── */}
       <div className="flex items-center gap-2 mb-5">
+        <button
+          onClick={async () => {
+            try {
+              await performDiaperChange(patient.id);
+              loadDetail();
+            } catch (err) {
+              console.error('Failed to log diaper change:', err);
+            }
+          }}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl
+                     border border-blue-200 bg-blue-50 text-blue-700
+                     text-xs font-semibold hover:bg-blue-100 transition-colors"
+        >
+          <CheckCircle className="w-3.5 h-3.5" />
+          Diaper Changed
+        </button>
         <button
           onClick={() => onEdit(patient)}
           className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl
@@ -214,15 +231,27 @@ function PatientDetailPanel({
           <Pencil className="w-3.5 h-3.5" />
           Edit Patient
         </button>
-        <button
-          onClick={() => onArchive(patient)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl
-                     border border-amber-200 bg-amber-50 text-amber-700
-                     text-xs font-semibold hover:bg-amber-100 transition-colors"
-        >
-          <Archive className="w-3.5 h-3.5" />
-          Archive
-        </button>
+        {patient.isArchived ? (
+          <button
+            onClick={() => onUnarchive(patient)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl
+                       border border-green-200 bg-green-50 text-green-700
+                       text-xs font-semibold hover:bg-green-100 transition-colors"
+          >
+            <Archive className="w-3.5 h-3.5" />
+            Unarchive
+          </button>
+        ) : (
+          <button
+            onClick={() => onArchive(patient)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl
+                       border border-amber-200 bg-amber-50 text-amber-700
+                       text-xs font-semibold hover:bg-amber-100 transition-colors"
+          >
+            <Archive className="w-3.5 h-3.5" />
+            Archive
+          </button>
+        )}
       </div>
 
       {/* ── Disease Profile (if set) ── */}
@@ -247,14 +276,14 @@ function PatientDetailPanel({
       )}
 
       {/* ── Status Grid ── */}
-      <div className="grid grid-cols-2 gap-3 mb-5">
+      <div className="grid grid-cols-2 gap-3 mb-1">
         <div className="bg-gray-50 rounded-xl p-3">
-          <p className="text-xs text-gray-500 mb-1">Current Wetness</p>
+          <p className="text-xs text-gray-500 mb-1">Last Wetness</p>
           <p className={`text-2xl font-extrabold ${getWetnessColor(patient.wetnessPercent)}`}>{patient.wetnessPercent}%</p>
           <p className="text-xs text-gray-400 mt-0.5">{patient.wetnessLevel}</p>
         </div>
         <div className="bg-gray-50 rounded-xl p-3">
-          <p className="text-xs text-gray-500 mb-1">Battery Level</p>
+          <p className="text-xs text-gray-500 mb-1">Last Battery</p>
           <p className={`text-2xl font-extrabold ${getBatteryColor(patient.batteryPercent)}`}>{patient.batteryPercent}%</p>
           <p className="text-xs text-gray-400 mt-0.5">{patient.deviceId}</p>
         </div>
@@ -269,6 +298,9 @@ function PatientDetailPanel({
           <p className="text-xs text-gray-400 mt-0.5">Avg: {patient.avgDailyEvents}/day</p>
         </div>
       </div>
+      {patient.deviceStatus === 'Offline' && (
+        <p className="text-[10px] text-gray-400 italic mb-4 text-center">Values shown are last recorded — device is offline</p>
+      )}
 
       {/* ── Risk Score ── */}
       <div className="mb-5">
@@ -395,11 +427,11 @@ function PatientDetailPanel({
               <p className="text-[10px] text-gray-400 mt-1">Orange line = 75% threshold</p>
             </div>
 
-            {/* ══ 2. Urination Frequency ══ */}
+            {/* ══ 2. Wetness Detection Frequency ══ */}
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <BarChart2 className="w-4 h-4 text-teal-500" />
-                <p className="text-sm font-semibold text-gray-700">Urination Frequency</p>
+                <p className="text-sm font-semibold text-gray-700">Wetness Detection Frequency</p>
               </div>
               {loading ? <ChartSkeleton /> : !detail || detail.urinationFrequency.length === 0 ? (
                 <p className="text-xs text-gray-400 italic">No frequency data available.</p>
@@ -822,8 +854,8 @@ export default function PatientsPage() {
                   {[
                     { label: 'Patient',     key: 'name'           },
                     { label: 'Age',         key: 'age'            },
-                    { label: 'Wetness',     key: 'wetnessPercent' },
-                    { label: 'Battery',     key: 'batteryPercent' },
+                    { label: 'Last Wetness',     key: 'wetnessPercent' },
+                    { label: 'Last Battery',     key: 'batteryPercent' },
                     { label: 'Status',      key: 'deviceStatus'   },
                     { label: 'Risk',        key: 'riskScore'      },
                     { label: 'Last Update', key: 'lastUpdate'     },
@@ -952,6 +984,15 @@ export default function PatientsPage() {
             }}
             onEdit={(p) => { setEditPatient(p); setFormOpen(true); }}
             onArchive={(p) => setArchiveTarget(p)}
+            onUnarchive={async (p) => {
+              try {
+                await unarchivePatient(p.id);
+                showToast('Patient unarchived successfully.', 'success');
+                loadPatients(archiveFilter);
+              } catch (err) {
+                showToast('Failed to unarchive patient.', 'error');
+              }
+            }}
           />
         )}
       </div>

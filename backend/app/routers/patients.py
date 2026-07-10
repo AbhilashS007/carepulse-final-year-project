@@ -167,3 +167,61 @@ def archive_patient(
             detail=f"Patient with ID {patient_id} not found",
         )
     return patient
+
+
+# ================================================================
+# UNARCHIVE — restore archived patient (non-destructive)
+# ================================================================
+
+@router.patch("/{patient_id}/unarchive", response_model=schemas.PatientOut)
+def unarchive_patient(
+    patient_id:   int,
+    db:           Session = Depends(get_db),
+    current_user: User    = Depends(get_current_user),
+):
+    """
+    Restore a soft-archived patient.
+
+    Sets **is_archived = False**. All historical data (alerts, sensor events,
+    AI insights) is fully preserved. The patient reappears in the active list.
+
+    Raises **404** if the patient does not exist.
+    """
+    patient = crud.unarchive_patient(db, patient_id)
+    if patient is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Patient with ID {patient_id} not found",
+        )
+    return patient
+
+
+# ================================================================
+# DIAPER CHANGE (Phase 4E)
+# ================================================================
+
+@router.post("/{patient_id}/diaper-change", status_code=status.HTTP_200_OK)
+def change_diaper(
+    patient_id:   int,
+    change_data:  schemas.DiaperChangeRequest,
+    db:           Session = Depends(get_db),
+    current_user: User    = Depends(get_current_user),
+):
+    """
+    Record a diaper change for the patient.
+    
+    This resolves all active high_wetness alerts and records an info alert
+    so that it appears in the history timeline.
+    """
+    result = crud.perform_diaper_change(
+        db, 
+        patient_id=patient_id,
+        changed_by=change_data.changed_by,
+        notes=change_data.notes
+    )
+    if "error" in result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=result["error"],
+        )
+    return result

@@ -8,6 +8,7 @@ import PatientsPage from './pages/PatientsPage';
 import AlertsPage from './pages/AlertsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import AIInsightsPage from './pages/AIInsightsPage';
+import DevicesPage from './pages/DevicesPage';
 import { isAuthenticated } from './services/authService';
 
 /**
@@ -53,6 +54,7 @@ export default function App() {
             <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/ai-insights" element={<AIInsightsPage />} />
+            <Route path="/devices" element={<DevicesPage />} />
           </Route>
         </Route>
 

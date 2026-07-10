@@ -15,10 +15,10 @@ constructed directly from SQLAlchemy ORM objects (orm_mode in Pydantic v1).
 
 from __future__ import annotations
 
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # ================================================================
@@ -32,7 +32,28 @@ class _Base(BaseModel):
     SQLAlchemy ORM objects (replaces orm_mode=True in Pydantic v1).
     """
     model_config = ConfigDict(from_attributes=True)
+    
+    @model_validator(mode='after')
+    def ensure_utc_timezone(self):
+        """Ensure all returned naive datetimes are treated as UTC so they serialize with 'Z'."""
+        for field_name, value in self:
+            if isinstance(value, datetime) and value.tzinfo is None:
+                setattr(self, field_name, value.replace(tzinfo=timezone.utc))
+        return self
 
+
+# ================================================================
+# DEVICE SCHEMAS
+# ================================================================
+
+class DeviceOverview(_Base):
+    device_id: str
+    status: str
+    last_packet_at: Optional[datetime]
+    firmware_version: Optional[str]
+    wifi_rssi: Optional[int] = None
+    assigned_patient_id: Optional[int]
+    assigned_patient_name: Optional[str]
 
 # ================================================================
 # PATIENT SCHEMAS
@@ -75,6 +96,18 @@ class PatientBase(_Base):
         if v is not None and v not in allowed:
             raise ValueError(f"disease_severity must be one of {allowed}")
         return v
+
+    @model_validator(mode='after')
+    def clean_device_id(self):
+        """Strip internal prefixes from device_id so they are never exposed to the UI."""
+        if self.device_id:
+            if self.device_id.startswith("archived_"):
+                parts = self.device_id.split("_", 2)
+                if len(parts) == 3:
+                    self.device_id = parts[2]
+            elif self.device_id.startswith("unassigned_"):
+                self.device_id = "unassigned"
+        return self
 
 
 class PatientCreate(PatientBase):
@@ -135,6 +168,18 @@ class PatientSummaryOut(_Base):
     diagnosis_date:   Optional[date]
     created_at:       datetime
     updated_at:       datetime
+
+    @model_validator(mode='after')
+    def clean_device_id(self):
+        """Strip internal prefixes from device_id so they are never exposed to the UI."""
+        if self.device_id:
+            if self.device_id.startswith("archived_"):
+                parts = self.device_id.split("_", 2)
+                if len(parts) == 3:
+                    self.device_id = parts[2]
+            elif self.device_id.startswith("unassigned_"):
+                self.device_id = "unassigned"
+        return self
 
 
 # ================================================================
@@ -372,6 +417,31 @@ class DailyEventCount(_Base):
     """
     date:        str    # ISO date string "YYYY-MM-DD"
     event_count: int
+
+
+class AnalyticsStats(_Base):
+    """
+    Computed analytics statistics returned by GET /analytics/stats.
+    All values derived from real database records.
+    """
+    avg_wetness:       float = 0.0
+    avg_interval_hrs:  float = 0.0
+    shortest_interval: str   = "N/A"
+    longest_interval:  str   = "N/A"
+    peak_time:         str   = "N/A"
+    today_events:      int   = 0
+    weekly_events:     int   = 0
+    monthly_events:    int   = 0
+    ward_average:      float = 0.0
+    max_wetness:       float = 0.0
+    date_range_start:  str   = ""
+    date_range_end:    str   = ""
+
+
+class DiaperChangeRequest(_Base):
+    """Schema for POST /patients/{id}/diaper-change."""
+    changed_by: str = Field("Caregiver", max_length=100, example="Nurse Rachel Kim")
+    notes:      Optional[str] = Field(None, max_length=500)
 
 
 # ================================================================

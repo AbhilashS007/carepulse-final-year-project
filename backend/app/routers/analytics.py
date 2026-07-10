@@ -60,3 +60,18 @@ def read_urination_frequency(
     """
     frequency = crud.get_urination_frequency(db, days=days)
     return frequency
+
+
+@router.get("/stats", response_model=schemas.AnalyticsStats)
+def read_analytics_stats(
+    days: int = Query(7, description="Number of days of history to include"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Retrieve computed analytics statistics derived from real database records.
+    Replaces all hardcoded analytics values.
+    Requires authentication.
+    """
+    stats = crud.get_analytics_stats(db, days=days)
+    return stats

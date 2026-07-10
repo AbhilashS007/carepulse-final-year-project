@@ -53,14 +53,6 @@ const classifyWetness = (percent: number): 'Dry' | 'Slightly Wet' | 'Moderately 
   return 'Saturated';
 };
 
-const mapDeviceStatus = (status: string): 'Online' | 'Offline' | 'Maintenance' => {
-  const mapping: Record<string, 'Online' | 'Offline' | 'Maintenance'> = {
-    online: 'Online',
-    offline: 'Offline',
-    maintenance: 'Maintenance',
-  };
-  return mapping[status] || 'Offline';
-};
 
 const mapRiskLevel = (level: string): 'Low' | 'Moderate' | 'High' | 'Critical' => {
   const mapping: Record<string, 'Low' | 'Moderate' | 'High' | 'Critical'> = {
@@ -107,8 +99,16 @@ const formatRelativeTime = (dateStr: string): string => {
   return date.toLocaleDateString();
 };
 
-const getEstimatedLastChange = (events: any[]): string => {
-  // Try to find the latest event that was low wetness or fallback to a standard duration
+const getEstimatedLastChange = (events: any[], patientAlerts: any[] = []): string => {
+  // First try to find a real diaper change alert
+  const diaperAlerts = patientAlerts.filter(a => a.alert_type === 'diaper_changed')
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  
+  if (diaperAlerts.length > 0) {
+    return formatRelativeTime(diaperAlerts[0].created_at);
+  }
+
+  // Fallback to the latest event that was low wetness
   const lowWetnessEvent = [...events]
     .sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime())
     .find(e => e.wetness_percent <= 30);
@@ -116,7 +116,7 @@ const getEstimatedLastChange = (events: any[]): string => {
   if (lowWetnessEvent) {
     return formatRelativeTime(lowWetnessEvent.recorded_at);
   }
-  return '4h 12m ago'; // Realistic fallback
+  return 'Never';
 };
 
 // ── Patient form payload (matches backend PatientCreate schema) ─────────
@@ -146,9 +146,10 @@ export interface TimelineEvent {
 }
 
 // Map backend patient details (including relationships) to frontend Patient format
-const mapBackendPatientToFrontend = (patient: any): any => {
+const mapBackendPatientToFrontend = (patient: any, liveDeviceStatus?: string): any => {
   const events = patient.urination_events || [];
   const insights = patient.ai_insights || [];
+  const alerts = patient.alerts || [];
   
   // Sort events newest first to get the latest reading
   const sortedEvents = [...events].sort(
@@ -158,12 +159,18 @@ const mapBackendPatientToFrontend = (patient: any): any => {
   const latestEvent = sortedEvents[0];
   const latestInsight = insights[0]; // insights are already sorted newest first in API
 
-  const wetnessPercent = latestEvent ? latestEvent.wetness_percent : 30;
-  const batteryPercent = latestEvent ? latestEvent.battery_percent : 80;
-  const deviceStatus = latestEvent ? mapDeviceStatus(latestEvent.device_status) : 'Offline';
+  const wetnessPercent = latestEvent ? latestEvent.wetness_percent : 0;
+  const batteryPercent = latestEvent ? latestEvent.battery_percent : 0;
+  
+  // Compute device status: use live status from device registry if provided, otherwise fallback
+  let deviceStatus = liveDeviceStatus || 'Never Connected';
+  if (!liveDeviceStatus && latestEvent) {
+    const ageSeconds = (new Date().getTime() - new Date(latestEvent.recorded_at + "Z").getTime()) / 1000;
+    deviceStatus = ageSeconds <= 30 ? 'Online' : 'Offline';
+  }
 
-  // Count events for "today" (using the day of the latest event as baseline today, or current date)
-  const todayDateStr = latestEvent ? latestEvent.recorded_at.split('T')[0] : new Date().toISOString().split('T')[0];
+  // Count events for "today" (using current UTC date)
+  const todayDateStr = new Date().toISOString().split('T')[0];
   const todayEvents = events.filter((e: any) => e.recorded_at.startsWith(todayDateStr)).length;
 
   return {
@@ -177,11 +184,11 @@ const mapBackendPatientToFrontend = (patient: any): any => {
     batteryPercent,
     deviceStatus,
     deviceId: patient.device_id,
-    lastUpdate: latestEvent ? formatRelativeTime(latestEvent.recorded_at) : 'Offline',
-    lastDiaperChange: getEstimatedLastChange(events),
-    todayEvents: todayEvents || 4,
-    avgDailyEvents: events.length > 0 ? parseFloat((events.length / 7).toFixed(1)) : 5.2,
-    riskScore: latestInsight ? latestInsight.risk_score : 35,
+    lastUpdate: latestEvent ? formatRelativeTime(latestEvent.recorded_at) : 'Never',
+    lastDiaperChange: getEstimatedLastChange(events, alerts),
+    todayEvents: todayEvents || 0,
+    avgDailyEvents: events.length > 0 ? parseFloat((events.length / 7).toFixed(1)) : 0,
+    riskScore: latestInsight ? latestInsight.risk_score : 0,
     riskLevel: latestInsight ? mapRiskLevel(latestInsight.risk_level) : 'Low',
     photo: '',
     condition: patient.condition,
@@ -265,9 +272,9 @@ export const getPatientDetail = async (patientId: string): Promise<{
   let latestInsight = null;
   if (rawInsights.length > 0) {
     const i = rawInsights[0];
-    let trend = 'Stable urination pattern';
-    if (i.risk_level === 'critical') trend = 'Urination frequency increased significantly';
-    else if (i.risk_level === 'high') trend = 'Urination frequency increased moderately';
+    let trend = 'Stable wetness detection pattern';
+    if (i.risk_level === 'critical') trend = 'Wetness detection frequency increased significantly';
+    else if (i.risk_level === 'high') trend = 'Wetness detection frequency increased moderately';
     else if (i.trend_direction === 'down') trend = 'Improving continence pattern';
     latestInsight = {
       riskLevel: mapRiskLevel(i.risk_level),
@@ -363,13 +370,23 @@ export const getPatientDetail = async (patientId: string): Promise<{
 };
 
 export const getPatients = async (filter: 'active' | 'archived' | 'all' = 'active'): Promise<any[]> => {
-  const response = await api.get('/patients', { params: { archived: filter } });
+  const [response, devicesResponse] = await Promise.all([
+    api.get('/patients', { params: { archived: filter } }),
+    api.get('/devices')
+  ]);
   const summaries = response.data;
+  const devices = devicesResponse.data;
+  
+  const deviceStatusMap = new Map<string, string>();
+  devices.forEach((d: any) => {
+    deviceStatusMap.set(d.device_id, d.status === 'online' ? 'Online' : 'Offline');
+  });
   
   // Fetch detailed info for each patient to construct full profiles
   const detailPromises = summaries.map(async (p: any) => {
     const detailResp = await api.get(`/patients/${p.id}`);
-    return mapBackendPatientToFrontend(detailResp.data);
+    const status = deviceStatusMap.get(p.device_id) || 'Never Connected';
+    return mapBackendPatientToFrontend(detailResp.data, status);
   });
   
   return Promise.all(detailPromises);
@@ -408,10 +425,39 @@ export const archivePatient = async (id: string): Promise<void> => {
   await api.patch(`/patients/${numericId}/archive`);
 };
 
+export const unarchivePatient = async (id: string): Promise<void> => {
+  const numericId = parseInt(id.replace(/\D/g, ''), 10);
+  await api.patch(`/patients/${numericId}/unarchive`);
+};
+
+export const performDiaperChange = async (patientId: string, notes?: string): Promise<any> => {
+  const numericId = parseInt(String(patientId).replace(/\D/g, ''), 10);
+  const response = await api.post(`/patients/${numericId}/diaper-change`, {
+    changed_by: "Caregiver",
+    notes: notes || undefined
+  });
+  return response.data;
+};
+
+// ── Devices ────────────────────────────────────────────────────────
+export interface DeviceOverview {
+  device_id: string;
+  status: 'online' | 'offline';
+  last_packet_at: string | null;
+  firmware_version: string | null;
+  assigned_patient_id: number | null;
+  assigned_patient_name: string | null;
+}
+
+export const getDevices = async (): Promise<DeviceOverview[]> => {
+  const { data } = await api.get<DeviceOverview[]>('/devices');
+  return data;
+};
+
 export const getAlerts = async (): Promise<any[]> => {
   const [alertsResponse, patientsResponse] = await Promise.all([
     api.get('/alerts'),
-    api.get('/patients'),
+    api.get('/patients', { params: { archived: 'all' } }),
   ]);
   
   const rawAlerts = alertsResponse.data;
@@ -478,9 +524,20 @@ export const getWetnessTrend = async (): Promise<any[]> => {
   });
 };
 
+export const getAnalyticsStats = async (days: number = 7): Promise<any> => {
+  const response = await api.get('/analytics/stats', { params: { days } });
+  return response.data;
+};
+
 export const getUrinationFrequency = async (): Promise<any[]> => {
   const response = await api.get('/analytics/urination-frequency');
-  return response.data.map((p: any) => {
+  const rawData = response.data;
+  
+  let totalEvents = 0;
+  rawData.forEach((p: any) => { totalEvents += p.event_count; });
+  const avg = rawData.length > 0 ? Math.round(totalEvents / rawData.length) : 0;
+
+  return rawData.map((p: any) => {
     const dateObj = new Date(p.date);
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -488,7 +545,7 @@ export const getUrinationFrequency = async (): Promise<any[]> => {
       day: dayNames[dateObj.getDay()],
       date: `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}`,
       events: p.event_count,
-      avgEvents: 45,
+      avgEvents: avg,
     };
   });
 };
@@ -496,7 +553,7 @@ export const getUrinationFrequency = async (): Promise<any[]> => {
 export const getAIInsights = async (): Promise<any[]> => {
   const [insightsResponse, patientsResponse] = await Promise.all([
     api.get('/ai-insights'),
-    api.get('/patients'),
+    api.get('/patients', { params: { archived: 'all' } }),
   ]);
   
   const rawInsights = insightsResponse.data;
@@ -511,11 +568,11 @@ export const getAIInsights = async (): Promise<any[]> => {
   return rawInsights.map((i: any) => {
     const patientInfo = patientLookup.get(i.patient_id) || { name: 'Unknown Patient', age: 70 };
     
-    let trend = 'Stable urination pattern';
+    let trend = 'Stable wetness detection pattern';
     if (i.risk_level === 'critical') {
-      trend = 'Urination frequency increased significantly';
+      trend = 'Wetness detection frequency increased significantly';
     } else if (i.risk_level === 'high') {
-      trend = 'Urination frequency increased moderately';
+      trend = 'Wetness detection frequency increased moderately';
     } else if (i.trend_direction === 'down') {
       trend = 'Improving continence pattern';
     }

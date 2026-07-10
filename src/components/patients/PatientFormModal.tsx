@@ -15,7 +15,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, Save, UserPlus, Pencil, Stethoscope } from 'lucide-react';
-import { createPatient, updatePatient, type PatientFormData } from '../../services/api';
+import { createPatient, updatePatient, getDevices, type PatientFormData, type DeviceOverview } from '../../services/api';
 import type { Patient } from '../../data/mockData';
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -93,6 +93,9 @@ export default function PatientFormModal({ open, editPatient, onClose, onSaved }
   const [errors,      setErrors]      = useState<FormErrors>({});
   const [submitting,  setSubmitting]  = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  
+  const [availableDevices, setAvailableDevices] = useState<DeviceOverview[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
 
   // Populate form whenever modal opens or mode switches
   useEffect(() => {
@@ -116,6 +119,20 @@ export default function PatientFormModal({ open, editPatient, onClose, onSaved }
     }
     setErrors({});
     setServerError(null);
+
+    // Fetch available devices
+    setLoadingDevices(true);
+    getDevices()
+      .then(devices => {
+        // We only want devices that are NOT assigned OR assigned to the current editPatient
+        const freeOrCurrent = devices.filter(d => 
+          d.assigned_patient_id === null || 
+          (editPatient && d.assigned_patient_id === parseInt(editPatient.id.replace(/\D/g, '')))
+        );
+        setAvailableDevices(freeOrCurrent);
+      })
+      .catch(err => console.error('Failed to load devices for dropdown', err))
+      .finally(() => setLoadingDevices(false));
   }, [open, editPatient]);
 
   // Field updater — clears error for that field on change
@@ -306,19 +323,32 @@ export default function PatientFormModal({ open, editPatient, onClose, onSaved }
             </FormField>
 
             <FormField
-              label="Device ID"
+              label="Assigned Device"
               required
               error={errors.device_id}
-              hint="Format: CP-DEV-013"
+              hint="Select a hardware module for this patient"
             >
-              <input
+              <select
                 id="patient-device-id"
-                type="text"
-                value={form.device_id}
-                onChange={e => setField('device_id', e.target.value.toUpperCase())}
-                placeholder="CP-DEV-013"
-                className={inputCls(!!errors.device_id)}
-              />
+                value={form.device_id.startsWith('unassigned_') ? 'unassigned' : form.device_id}
+                onChange={e => setField('device_id', e.target.value)}
+                className={selectCls(!!errors.device_id)}
+                disabled={loadingDevices}
+              >
+                <option value="">-- Select a Device --</option>
+                <option value="unassigned">No Device (Unassigned)</option>
+                {availableDevices.map(d => (
+                  <option key={d.device_id} value={d.device_id}>
+                    {d.device_id} {d.status === 'online' ? '(Online)' : '(Offline)'}
+                  </option>
+                ))}
+                {/* Fallback for current edit patient if their device_id wasn't in the list (e.g. they had a manually entered string not matching a real device) */}
+                {form.device_id && !form.device_id.startsWith('unassigned_') && !availableDevices.find(d => d.device_id === form.device_id) && (
+                  <option value={form.device_id}>
+                    {form.device_id} (Current)
+                  </option>
+                )}
+              </select>
             </FormField>
 
             <FormField label="Clinical Notes">

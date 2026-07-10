@@ -29,7 +29,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import type { Telemetry } from '../services/api';
+import { type Telemetry } from '../../services/api';
 
 // ── Colour helpers ───────────────────────────────────────────
 
@@ -251,7 +251,7 @@ export default function LiveTelemetryCard({
               <p className="text-xs text-gray-400 mt-0.5">
                 {isOnline
                   ? `Updated ${relativeTime(telemetry.created_at)}`
-                  : 'Waiting for device...'}
+                  : `Last recorded ${relativeTime(telemetry.created_at)}`}
               </p>
             </div>
           </div>
@@ -264,6 +264,11 @@ export default function LiveTelemetryCard({
             <RefreshCw className={`w-4 h-4 ${spinning ? 'animate-spin' : ''}`} />
           </button>
         </div>
+
+        {/* ── Offline indicator ── */}
+        {!isOnline && (
+          <p className="text-[10px] text-gray-400 italic mb-3 text-center">⚠ Last recorded values — device is offline</p>
+        )}
 
         {/* ── Metric gauges ── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
@@ -280,7 +285,7 @@ export default function LiveTelemetryCard({
           <div className={`bg-white/70 rounded-xl p-3 border border-gray-100 ring-1 ${w.ring}`}>
             <div className="flex items-center gap-1.5 mb-1">
               <Droplets className={`w-3.5 h-3.5 ${w.text}`} />
-              <span className="text-xs text-gray-500 font-medium">Wetness</span>
+              <span className="text-xs text-gray-500 font-medium">{isOnline ? 'Wetness' : 'Last Wetness'}</span>
             </div>
             <p className={`text-2xl font-extrabold telemetry-value ${w.text}`}>
               {telemetry.wetness_percent}<span className="text-sm font-bold">%</span>
@@ -292,7 +297,7 @@ export default function LiveTelemetryCard({
           <div className="bg-white/70 rounded-xl p-3 border border-gray-100">
             <div className="flex items-center gap-1.5 mb-1">
               <Battery className={`w-3.5 h-3.5 ${b.text}`} />
-              <span className="text-xs text-gray-500 font-medium">Battery</span>
+              <span className="text-xs text-gray-500 font-medium">{isOnline ? 'Battery' : 'Last Battery'}</span>
             </div>
             <p className={`text-2xl font-extrabold telemetry-value ${b.text}`}>
               {telemetry.battery_percent}<span className="text-sm font-bold">%</span>
@@ -304,7 +309,7 @@ export default function LiveTelemetryCard({
           <div className="bg-white/70 rounded-xl p-3 border border-gray-100">
             <div className="flex items-center gap-1.5 mb-1">
               <RssiIcon className={`w-3.5 h-3.5 ${r.text}`} />
-              <span className="text-xs text-gray-500 font-medium">RSSI</span>
+              <span className="text-xs text-gray-500 font-medium">{isOnline ? 'RSSI' : 'Last RSSI'}</span>
             </div>
             <p className={`text-2xl font-extrabold telemetry-value ${r.text}`}>
               {telemetry.wifi_rssi !== null ? telemetry.wifi_rssi : '—'}

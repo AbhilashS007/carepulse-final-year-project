@@ -4,18 +4,14 @@ import {
   Area,
   BarChart,
   Bar,
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
   ReferenceLine,
 } from 'recharts';
 import {
-  TrendingUp,
   BarChart3,
   Activity,
   Clock,
@@ -30,6 +26,7 @@ import {
   getWetnessTrend,
   getUrinationFrequency,
   getDashboardStats,
+  getAnalyticsStats,
 } from '../services/api';
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -56,19 +53,22 @@ export default function AnalyticsPage() {
   const [trendData, setTrendData] = useState<any[]>([]);
   const [frequencyData, setFrequencyData] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
+  const [analyticsStats, setAnalyticsStats] = useState<any>(null);
 
   const loadAnalytics = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [trend, freq, statsData] = await Promise.all([
+      const [trend, freq, statsData, aStatsData] = await Promise.all([
         getWetnessTrend(),
         getUrinationFrequency(),
         getDashboardStats(),
+        getAnalyticsStats(),
       ]);
       setTrendData(trend);
       setFrequencyData(freq);
       setStats(statsData);
+      setAnalyticsStats(aStatsData);
     } catch (err: any) {
       console.error('Error loading analytics:', err);
       setError(err?.message || 'Failed to connect to the CarePulse analytics service.');
@@ -90,7 +90,7 @@ export default function AnalyticsPage() {
     );
   }
 
-  if (error) {
+  if (error || !stats || !analyticsStats) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] p-6 bg-red-50 border border-red-100 rounded-2xl space-y-4 max-w-md mx-auto mt-12 animate-in">
         <div className="p-3 bg-red-100 rounded-full text-red-600">
@@ -111,34 +111,34 @@ export default function AnalyticsPage() {
   const statCards = [
     {
       label: 'Avg. Wetness Level',
-      value: '48%',
-      sub: 'Across all patients today',
-      trend: '+5%',
+      value: `${analyticsStats.avg_wetness}%`,
+      sub: '7-day average across all patients',
+      trend: 'Dynamic',
       trendUp: true,
       icon: Droplets,
       color: 'from-blue-500 to-blue-700',
     },
     {
       label: 'Daily Event Count',
-      value: stats ? String(stats.todayEvents) : '47',
-      sub: 'Total urination events today',
-      trend: '+4.4%',
+      value: String(analyticsStats.today_events),
+      sub: 'Total wetness events today',
+      trend: 'Dynamic',
       trendUp: true,
       icon: Activity,
       color: 'from-teal-500 to-cyan-600',
     },
     {
       label: 'Avg. Interval',
-      value: '2.4 hrs',
-      sub: 'Between urination events',
-      trend: '-0.2h',
+      value: `${analyticsStats.avg_interval_hrs} hrs`,
+      sub: 'Between wetness events',
+      trend: 'Dynamic',
       trendUp: false,
       icon: Clock,
       color: 'from-purple-500 to-indigo-600',
     },
     {
       label: 'Monitored Patients',
-      value: stats ? String(stats.totalPatients) : '12',
+      value: String(stats.totalPatients),
       sub: 'Data collected this week',
       trend: 'Stable',
       trendUp: true,
@@ -152,7 +152,7 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div>
         <h2 className="section-title">Analytics & Reports</h2>
-        <p className="section-subtitle">Week of 7–13 June 2026 · All patients</p>
+        <p className="section-subtitle">Date Range: {analyticsStats.date_range_start} to {analyticsStats.date_range_end} · All patients</p>
       </div>
 
       {/* Stat Cards */}
@@ -247,7 +247,7 @@ export default function AnalyticsPage() {
         <div className="cp-card p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="font-bold text-gray-900">Daily Urination Frequency</h3>
+              <h3 className="font-bold text-gray-900">Wetness Detection Frequency</h3>
               <p className="text-xs text-gray-400 mt-0.5">Total events per day · All patients</p>
             </div>
             <BarChart3 className="w-5 h-5 text-gray-300" />
@@ -294,10 +294,10 @@ export default function AnalyticsPage() {
       {/* ───── Interval Stats ───── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Shortest Interval', value: '45 min', patient: 'Arthur Mbeki', color: 'bg-red-50 border-red-200 text-red-700' },
-          { label: 'Longest Interval', value: '4.2 hrs', patient: 'Robert Patel', color: 'bg-green-50 border-green-200 text-green-700' },
-          { label: 'Ward Average', value: '2.4 hrs', patient: 'All patients', color: 'bg-blue-50 border-blue-200 text-blue-700' },
-          { label: 'Peak Time', value: '03:00 AM', patient: 'Night shift spike', color: 'bg-purple-50 border-purple-200 text-purple-700' },
+          { label: 'Shortest Interval', value: analyticsStats.shortest_interval, patient: 'Minimum gap', color: 'bg-red-50 border-red-200 text-red-700' },
+          { label: 'Longest Interval', value: analyticsStats.longest_interval, patient: 'Maximum gap', color: 'bg-green-50 border-green-200 text-green-700' },
+          { label: 'Ward Average', value: `${analyticsStats.ward_average} hrs`, patient: 'All patients', color: 'bg-blue-50 border-blue-200 text-blue-700' },
+          { label: 'Peak Time', value: analyticsStats.peak_time, patient: 'Most events', color: 'bg-purple-50 border-purple-200 text-purple-700' },
         ].map(({ label, value, patient, color }) => (
           <div key={label} className={`rounded-2xl border p-4 ${color}`}>
             <div className="flex items-center gap-1.5 mb-2">

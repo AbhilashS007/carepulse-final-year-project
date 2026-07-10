@@ -81,7 +81,7 @@ export default function LoginPage() {
               { icon: Activity, text: 'Real-time wetness monitoring across all patients' },
               { icon: Zap, text: 'Instant alerts with < 30s response time' },
               { icon: Shield, text: 'AES-256 encrypted healthcare data' },
-              { icon: Droplets, text: 'AI-powered urination pattern analysis' },
+              { icon: Droplets, text: 'AI-powered wetness pattern analysis' },
             ].map(({ icon: Icon, text }) => (
               <div key={text} className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center shrink-0">

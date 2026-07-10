@@ -37,9 +37,9 @@ const features = [
   },
   {
     icon: BarChart3,
-    title: 'Urination Analytics',
+    title: 'Wetness Analytics',
     description:
-      'Detailed analytics on urination frequency, patterns, and intervals. Visualize trends across days and weeks per patient.',
+      'Detailed analytics on wetness detection frequency, patterns, and intervals. Visualize trends across days and weeks per patient.',
     color: 'from-teal-500 to-cyan-600',
     bg: 'bg-teal-50',
   },

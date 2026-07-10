@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import patients, alerts, analytics, ai_insights, auth, gemini
-from app.routers import telemetry
+from app.routers import telemetry, devices
 from app.database import engine
 from app.migration_utils import run_migrations
 
@@ -47,6 +47,7 @@ app.include_router(analytics.dashboard_router)
 app.include_router(ai_insights.router)
 app.include_router(gemini.router)
 app.include_router(telemetry.router)
+app.include_router(devices.router)
 # ── Endpoints ─────────────────────────────────────────────────
 
 @app.get("/", tags=["system"])

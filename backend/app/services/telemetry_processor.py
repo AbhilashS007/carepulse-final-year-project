@@ -21,8 +21,10 @@ logger.setLevel(logging.INFO)
 
 HIGH_WETNESS_THRESHOLD = 75.0
 CRITICAL_WETNESS_THRESHOLD = 90.0
-WETNESS_CHANGE_THRESHOLD = 10.0
-MIN_EVENT_INTERVAL_SEC = 120
+DRY_THRESHOLD = 30.0                # Below this = "dry" state
+WETNESS_CHANGE_THRESHOLD = 10.0     # Minimum % change for a new event
+WETNESS_HIGH_CHANGE_THRESHOLD = 5.0 # Minimum % change while already high
+MIN_EVENT_INTERVAL_SEC = 300        # 5 min — periodic capture when changed
 
 LOW_BATTERY_WARNING = 20.0
 LOW_BATTERY_CRITICAL = 10.0
@@ -31,6 +33,15 @@ BATTERY_RESOLVE_THRESHOLD = 25.0
 AI_REGEN_COOLDOWN_SEC = 300
 
 # ────────────────────────────────────────────────────────────────────
+
+def _wetness_state(percent: float) -> str:
+    """Classify wetness into a clinical state for transition detection."""
+    if percent <= DRY_THRESHOLD:
+        return "dry"
+    if percent < HIGH_WETNESS_THRESHOLD:
+        return "wet"
+    return "high"
+
 
 def log_step(step: str, details: str = ""):
     """Helper for structured processing logs."""
@@ -68,26 +79,45 @@ def process_telemetry_packet(telemetry_id: int) -> None:
         # We use recorded_at = telemetry.created_at or esp32_timestamp
         record_time = telemetry.esp32_timestamp or telemetry.created_at
         
-        # 2. Clinical Event (UrinationEvent Deduplication)
+        # 2. Clinical Event — State-Transition Deduplication
+        #
+        #    Create a new UrinationEvent when one of these conditions is met:
+        #      a) No previous event exists (first reading)
+        #      b) State transition: Dry→Wet, Wet→High, High→Wet, Wet→Dry
+        #      c) Significant wetness change (≥10%) regardless of state
+        #      d) Periodic capture: ≥5 minutes elapsed AND wetness changed ≥5%
+        #
+        #    This prevents noise from continuous high-wetness telemetry while
+        #    ensuring all clinically significant transitions are captured.
         latest_event = db.query(UrinationEvent).filter(
             UrinationEvent.patient_id == patient.id
         ).order_by(UrinationEvent.recorded_at.desc()).first()
 
         create_event = False
+        event_reason = ""
         
         if not latest_event:
             create_event = True
+            event_reason = "First reading"
         else:
             time_diff = (record_time - latest_event.recorded_at).total_seconds()
             wetness_diff = abs(telemetry.wetness_percent - latest_event.wetness_percent)
             
-            if wetness_diff >= WETNESS_CHANGE_THRESHOLD:
+            prev_state = _wetness_state(latest_event.wetness_percent)
+            curr_state = _wetness_state(telemetry.wetness_percent)
+            
+            # a) State transition (Dry↔Wet↔High)
+            if prev_state != curr_state:
                 create_event = True
-            elif telemetry.wetness_percent >= HIGH_WETNESS_THRESHOLD:
-                # Always log high wetness points to capture the peak accurately
+                event_reason = f"State transition: {prev_state}→{curr_state}"
+            # b) Large wetness change within same state
+            elif wetness_diff >= WETNESS_CHANGE_THRESHOLD:
                 create_event = True
-            elif time_diff >= MIN_EVENT_INTERVAL_SEC:
+                event_reason = f"Wetness change: {wetness_diff:.0f}%"
+            # c) Periodic capture with meaningful change
+            elif time_diff >= MIN_EVENT_INTERVAL_SEC and wetness_diff >= WETNESS_HIGH_CHANGE_THRESHOLD:
                 create_event = True
+                event_reason = f"Periodic capture ({int(time_diff)}s, Δ{wetness_diff:.0f}%)"
 
         event_created = False
         if create_event:
@@ -102,7 +132,7 @@ def process_telemetry_packet(telemetry_id: int) -> None:
             )
             db.add(new_event)
             event_created = True
-            log_step("Clinical Event", f"Created UrinationEvent (wetness={telemetry.wetness_percent}%)")
+            log_step("Clinical Event", f"Created UrinationEvent (wetness={telemetry.wetness_percent}%) — {event_reason}")
         else:
             log_step("Clinical Event", "Skipped (Deduplicated)")
 

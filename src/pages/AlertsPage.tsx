@@ -134,7 +134,7 @@ export default function AlertsPage() {
         <h3 className="text-lg font-bold text-gray-900">Failed to load Alert Center</h3>
         <p className="text-sm text-red-700 text-center">{error}</p>
         <button
-          onClick={loadAlerts}
+          onClick={() => loadAlerts(true)}
           className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 active:scale-95 transition-all shadow-md"
         >
           Retry Connection
@@ -144,7 +144,12 @@ export default function AlertsPage() {
   }
 
   const activeAlerts = alertsList.filter(a => !a.resolved);
-  const resolvedAlerts = alertsList.filter(a => a.resolved);
+  const resolvedAlertsToday = alertsList.filter(a => {
+    if (!a.resolved || !a.resolvedAt) return false;
+    const resolvedDate = new Date(a.resolvedAt).toDateString();
+    const today = new Date().toDateString();
+    return resolvedDate === today;
+  });
 
   const filteredAlerts = alertsList.filter(a => {
     const matchesSearch = a.patientName.toLowerCase().includes(search.toLowerCase()) ||
@@ -165,7 +170,7 @@ export default function AlertsPage() {
         <div>
           <h2 className="section-title">Alert Center</h2>
           <p className="section-subtitle">
-            {activeAlerts.length} active · {resolvedAlerts.length} resolved today
+            {activeAlerts.length} active · {resolvedAlertsToday.length} resolved today
           </p>
         </div>
       </div>
@@ -176,7 +181,7 @@ export default function AlertsPage() {
           { label: 'Active Alerts', value: activeAlerts.length, color: 'bg-red-50 border-red-200', text: 'text-red-700', icon: Bell, iconBg: 'bg-red-100 text-red-600' },
           { label: 'Critical', value: criticalCount, color: 'bg-rose-50 border-rose-200', text: 'text-rose-700', icon: AlertTriangle, iconBg: 'bg-rose-100 text-rose-600' },
           { label: 'Warnings', value: warningCount, color: 'bg-amber-50 border-amber-200', text: 'text-amber-700', icon: Battery, iconBg: 'bg-amber-100 text-amber-600' },
-          { label: 'Resolved Today', value: resolvedAlerts.length, color: 'bg-green-50 border-green-200', text: 'text-green-700', icon: CheckCircle2, iconBg: 'bg-green-100 text-green-600' },
+          { label: 'Resolved Today', value: resolvedAlertsToday.length, color: 'bg-green-50 border-green-200', text: 'text-green-700', icon: CheckCircle2, iconBg: 'bg-green-100 text-green-600' },
         ].map(({ label, value, color, text, icon: Icon, iconBg }) => (
           <div key={label} className={`rounded-2xl border p-4 flex items-center gap-4 ${color}`}>
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${iconBg}`}>

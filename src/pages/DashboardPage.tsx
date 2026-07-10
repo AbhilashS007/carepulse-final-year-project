@@ -37,6 +37,7 @@ import {
   getWetnessTrend,
   getLatestTelemetry,
   getRecentTelemetry,
+  getAnalyticsStats,
 } from '../services/api';
 import type { Telemetry } from '../services/api';
 import LiveTelemetryCard from '../components/dashboard/LiveTelemetryCard';
@@ -57,6 +58,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<any>(null);
+  const [analyticsStats, setAnalyticsStats] = useState<any>(null);
   const [patientsList, setPatientsList] = useState<any[]>([]);
   const [alertsList, setAlertsList] = useState<any[]>([]);
   const [trendList, setTrendList] = useState<any[]>([]);
@@ -65,16 +67,18 @@ export default function DashboardPage() {
     if (showLoading) setLoading(true);
     if (showLoading) setError(null);
     try {
-      const [statsData, patientsData, alertsData, trendData] = await Promise.all([
+      const [statsData, patientsData, alertsData, trendData, aStatsData] = await Promise.all([
         getDashboardStats(),
         getPatients(),
         getAlerts(),
         getWetnessTrend(),
+        getAnalyticsStats(),
       ]);
       setStats(statsData);
       setPatientsList(patientsData);
       setAlertsList(alertsData);
       setTrendList(trendData);
+      setAnalyticsStats(aStatsData);
     } catch (err: any) {
       console.error('Error loading dashboard data:', err);
       if (showLoading) setError(err?.message || 'Unable to connect to the CarePulse API server. Please make sure the backend is running.');
@@ -135,7 +139,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (error || !stats) {
+  if (error || !stats || !analyticsStats) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] p-6 bg-red-50 border border-red-100 rounded-2xl space-y-4 max-w-md mx-auto mt-12 animate-in">
         <div className="p-3 bg-red-100 rounded-full text-red-600">
@@ -144,7 +148,7 @@ export default function DashboardPage() {
         <h3 className="text-lg font-bold text-gray-900">Failed to load data</h3>
         <p className="text-sm text-red-700 text-center">{error}</p>
         <button
-          onClick={loadData}
+          onClick={() => loadData(true)}
           className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 active:scale-95 transition-all shadow-md"
         >
           Retry Connection
@@ -166,7 +170,7 @@ export default function DashboardPage() {
       value: stats.totalPatients,
       icon: Users,
       iconBg: 'from-blue-500 to-blue-600',
-      trend: '+2 this month',
+      trend: `${stats.totalPatients} active patients`,
       trendUp: true,
       description: 'Currently monitored',
     },
@@ -193,9 +197,9 @@ export default function DashboardPage() {
       value: stats.todayEvents,
       icon: Activity,
       iconBg: 'from-teal-500 to-cyan-600',
-      trend: '+4.4% vs yesterday',
+      trend: `${analyticsStats.weekly_events} this week`,
       trendUp: true,
-      description: 'Urination events logged',
+      description: 'Wetness detection events logged',
     },
   ];
 
@@ -442,7 +446,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-right shrink-0">
                   <div className={`text-xs font-bold ${getBatteryColor(p.batteryPercent)}`}>
-                    🔋{p.batteryPercent}%
+                     {p.batteryPercent}%
                   </div>
                   <div className={`text-xs mt-0.5 ${p.deviceStatus === 'Online' ? 'text-green-600' : 'text-red-500'}`}>
                     {p.deviceStatus}
@@ -503,10 +507,10 @@ export default function DashboardPage() {
       {/* ───── Bottom Row: Quick Stats ───── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { icon: Droplets, label: 'Avg. Wetness', value: '48%', sub: 'Across all patients', color: 'text-blue-600 bg-blue-50' },
-          { icon: Clock, label: 'Avg. Interval', value: '2.4 hrs', sub: 'Between changes', color: 'text-teal-600 bg-teal-50' },
-          { icon: AlertTriangle, label: 'Critical Threshold', value: '75%', sub: 'Alert trigger level', color: 'text-red-600 bg-red-50' },
-          { icon: Activity, label: 'System Uptime', value: '98.5%', sub: 'Last 30 days', color: 'text-green-600 bg-green-50' },
+          { icon: Droplets, label: 'Avg. Wetness', value: `${analyticsStats.avg_wetness}%`, sub: 'Across all patients', color: 'text-blue-600 bg-blue-50' },
+          { icon: Clock, label: 'Avg. Interval', value: `${analyticsStats.avg_interval_hrs} hrs`, sub: 'Between changes', color: 'text-teal-600 bg-teal-50' },
+          { icon: AlertTriangle, label: 'Critical Threshold', value: '75%', sub: 'Configuration constant', color: 'text-red-600 bg-red-50' },
+          { icon: Activity, label: 'System Status', value: 'Active', sub: 'Monitoring Data', color: 'text-green-600 bg-green-50' },
         ].map(({ icon: Icon, label, value, sub, color }) => (
           <div key={label} className="cp-card p-4 flex items-center gap-4">
             <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${color}`}>

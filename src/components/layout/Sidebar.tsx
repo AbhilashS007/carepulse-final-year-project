@@ -8,6 +8,7 @@ import {
   Activity,
   ChevronRight,
   Heart,
+  Cpu,
 } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 
@@ -17,6 +18,7 @@ const navItems = [
   { label: 'Alerts', icon: Bell, path: '/alerts' },
   { label: 'Analytics', icon: BarChart3, path: '/analytics' },
   { label: 'AI Insights', icon: Sparkles, path: '/ai-insights' },
+  { label: 'Devices', icon: Cpu, path: '/devices' },
 ];
 
 export default function Sidebar() {

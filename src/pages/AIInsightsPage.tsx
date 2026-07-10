@@ -297,7 +297,7 @@ export default function AIInsightsPage() {
         <h3 className="text-lg font-bold text-gray-900">Failed to load AI Insights</h3>
         <p className="text-sm text-red-700 text-center">{error}</p>
         <button
-          onClick={loadInsights}
+          onClick={() => loadInsights(true)}
           className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 active:scale-95 transition-all shadow-md"
         >
           Retry Connection
@@ -311,9 +311,31 @@ export default function AIInsightsPage() {
     return b.trendPercent - a.trendPercent;
   });
 
-  const avgRisk = insightsList.length > 0 ? Math.round(insightsList.reduce((s, i) => s + i.riskScore, 0) / insightsList.length) : 0;
-  const criticalCount = insightsList.filter(i => i.riskLevel === 'Critical').length;
-  const improvingCount = insightsList.filter(i => i.trendDirection === 'down').length;
+  // Calculate stats based on distinct patients (using their most recent insight)
+  const distinctPatientIds = new Set(insightsList.map(i => i.patientId));
+  const patientsAnalyzed = distinctPatientIds.size;
+  
+  const latestInsightsPerPatient = Array.from(distinctPatientIds).map(pid => {
+    // Assuming insightsList is already sorted by date desc from API, find first match
+    return insightsList.find(i => i.patientId === pid)!;
+  });
+
+  const avgRisk = latestInsightsPerPatient.length > 0 
+    ? Math.round(latestInsightsPerPatient.reduce((s, i) => s + i.riskScore, 0) / latestInsightsPerPatient.length) 
+    : 0;
+  
+  const criticalCount = latestInsightsPerPatient.filter(i => i.riskLevel === 'Critical').length;
+  const improvingCount = latestInsightsPerPatient.filter(i => i.trendDirection === 'down').length;
+
+  let latestTimestamp = 'No insights generated';
+  if (insightsList.length > 0) {
+    const mostRecent = insightsList.reduce((latest, current) => {
+      return new Date(current.generatedAt) > new Date(latest.generatedAt) ? current : latest;
+    });
+    latestTimestamp = `Generated ${new Date(mostRecent.generatedAt).toLocaleString('en-GB', { 
+      day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    })}`;
+  }
 
   return (
     <div className="space-y-6 animate-in">
@@ -325,7 +347,7 @@ export default function AIInsightsPage() {
             <h2 className="section-title">AI Health Insights</h2>
           </div>
           <p className="section-subtitle">
-            Generated {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })} at 13:00
+            {latestTimestamp}
           </p>
         </div>
         <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl p-1">
@@ -365,7 +387,7 @@ export default function AIInsightsPage() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Patients Analyzed', value: insightsList.length, icon: <CheckCircle2 className="w-4 h-4 text-green-500" /> },
+            { label: 'Patients Analyzed', value: patientsAnalyzed, icon: <CheckCircle2 className="w-4 h-4 text-green-500" /> },
             { label: 'Avg. Risk Score', value: `${avgRisk}/100`, icon: <AlertTriangle className="w-4 h-4 text-amber-500" /> },
             { label: 'Critical Cases', value: criticalCount, icon: <ArrowUp className="w-4 h-4 text-red-500" /> },
             { label: 'Improving', value: improvingCount, icon: <ArrowDown className="w-4 h-4 text-green-500" /> },
