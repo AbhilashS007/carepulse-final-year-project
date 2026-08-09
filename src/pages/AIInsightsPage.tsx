@@ -235,9 +235,9 @@ function InsightCard({ insight, onRegenerated }: { insight: AIInsight; onRegener
             <RefreshCw className={`w-3 h-3 ${regenerating ? 'animate-spin' : ''}`} />
             {regenerating ? 'Generating...' : 'Regenerate'}
           </button>
-          <div className="flex items-center gap-1 text-xs text-gray-400">
+          <div className="flex items-center gap-1 text-xs text-gray-400" title={new Date(insight.generatedAt).toLocaleString()}>
             <Clock className="w-3 h-3" />
-            {new Date(insight.generatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} today
+            Generated: {new Date(insight.generatedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
       </div>
@@ -257,7 +257,7 @@ export default function AIInsightsPage() {
   const [insightsList, setInsightsList] = useState<AIInsight[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'risk' | 'trend'>('risk');
+  const [sortBy, setSortBy] = useState<'newest' | 'risk' | 'trend'>('newest');
 
   const loadInsights = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -307,6 +307,14 @@ export default function AIInsightsPage() {
   }
 
   const sorted = [...insightsList].sort((a, b) => {
+    if (sortBy === 'newest') {
+      const timeDiff = new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime();
+      if (timeDiff !== 0) return timeDiff;
+      // Secondary sort: higher ID first (parse numeric portion from e.g. "INS042")
+      const aId = parseInt(a.id.replace(/\D/g, ''), 10) || 0;
+      const bId = parseInt(b.id.replace(/\D/g, ''), 10) || 0;
+      return bId - aId;
+    }
     if (sortBy === 'risk') return b.riskScore - a.riskScore;
     return b.trendPercent - a.trendPercent;
   });
@@ -351,6 +359,14 @@ export default function AIInsightsPage() {
           </p>
         </div>
         <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl p-1">
+          <button
+            onClick={() => setSortBy('newest')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              sortBy === 'newest' ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Sort by Newest
+          </button>
           <button
             onClick={() => setSortBy('risk')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${

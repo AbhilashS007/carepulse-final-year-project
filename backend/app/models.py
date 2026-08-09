@@ -166,9 +166,10 @@ class Patient(Base):
         "UrinationEvent", back_populates="patient", cascade="all, delete-orphan"
     )
 
-    # One patient → many AI insight records
+    # One patient → many AI insight records (newest first)
     ai_insights: Mapped[list["AIInsight"]] = relationship(
-        "AIInsight", back_populates="patient", cascade="all, delete-orphan"
+        "AIInsight", back_populates="patient", cascade="all, delete-orphan",
+        order_by="AIInsight.generated_at.desc(), AIInsight.id.desc()"
     )
 
     def __repr__(self) -> str:

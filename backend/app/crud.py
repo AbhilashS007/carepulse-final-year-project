@@ -603,7 +603,7 @@ def get_all_ai_insights(
     return (
         db.query(AIInsight)
         .options(joinedload(AIInsight.patient))     # pre-load patient data
-        .order_by(AIInsight.generated_at.desc())    # newest insight first
+        .order_by(AIInsight.generated_at.desc(), AIInsight.id.desc())    # newest insight first; ID tiebreak
         .offset(skip)
         .limit(limit)
         .all()

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.models import Telemetry, UrinationEvent, Alert, Patient, AIInsight
-from app.crud import _classify_wetness
+from app.crud import _classify_wetness, get_last_diaper_change
 from app.services.device_mapper import get_patient_by_device_id
 from app.database import SessionLocal
 
@@ -147,26 +147,44 @@ def process_telemetry_packet(telemetry_id: int) -> None:
             Alert.resolved == False
         ).first()
 
-        if telemetry.wetness_percent >= HIGH_WETNESS_THRESHOLD:
-            if not active_wetness_alert:
+        waiting_for_dry = False
+        if telemetry.wetness_percent > DRY_THRESHOLD and not active_wetness_alert:
+            last_change_time = get_last_diaper_change(db, patient.id)
+            if last_change_time:
+                last_change_naive = last_change_time.replace(tzinfo=None)
+                # Check if there is any DRY telemetry since the last diaper change
+                has_dry_since_change = db.query(Telemetry).filter(
+                    Telemetry.device_id == patient.device_id,
+                    Telemetry.created_at >= last_change_naive,
+                    Telemetry.wetness_percent <= DRY_THRESHOLD
+                ).first() is not None
+                
+                if not has_dry_since_change:
+                    waiting_for_dry = True
+                    log_step("Alert Evaluation", "Sensor still WET from previous session. Waiting for DRY.")
+
+        if telemetry.wetness_percent > DRY_THRESHOLD:
+            if not active_wetness_alert and not waiting_for_dry:
                 severity = "critical" if telemetry.wetness_percent >= CRITICAL_WETNESS_THRESHOLD else "warning"
                 alert = Alert(
                     patient_id=patient.id,
                     alert_type="high_wetness",
                     severity=severity,
-                    message=f"High wetness detected: {telemetry.wetness_percent}%",
+                    message=f"Wetness detected: {telemetry.wetness_percent}%",
                 )
                 db.add(alert)
                 alerts_changed = True
                 if severity == "critical":
                     critical_alert_generated = True
-                log_step("Alert Evaluation", f"Created High Wetness Alert ({severity})")
-        else:
-            if active_wetness_alert:
-                active_wetness_alert.resolved = True
-                active_wetness_alert.resolved_at = datetime.now(timezone.utc).replace(tzinfo=None)
-                alerts_changed = True
-                log_step("Alert Evaluation", "Resolved High Wetness Alert")
+                log_step("Alert Evaluation", f"Created Wetness Alert ({severity})")
+            elif active_wetness_alert:
+                # Upgrade severity if it becomes critical
+                if telemetry.wetness_percent >= CRITICAL_WETNESS_THRESHOLD and active_wetness_alert.severity != "critical":
+                    active_wetness_alert.severity = "critical"
+                    active_wetness_alert.message = f"High wetness detected: {telemetry.wetness_percent}%"
+                    alerts_changed = True
+                    critical_alert_generated = True
+                    log_step("Alert Evaluation", "Upgraded Wetness Alert to Critical")
 
         # Check Low Battery Alert
         active_battery_alert = db.query(Alert).filter(

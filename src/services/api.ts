@@ -216,6 +216,7 @@ export const getPatientDetail = async (patientId: string): Promise<{
     riskLevel: string; riskScore: number; confidence: number;
     recommendation: string; trend: string; trendDirection: string; trendPercent: number;
     insight: string;
+    generatedAt: string;
     disease?: string;
     diseaseSeverity?: string;
   } | null;
@@ -267,7 +268,11 @@ export const getPatientDetail = async (patientId: string): Promise<{
 
   // Latest AI insight
   const rawInsights: any[] = (data.ai_insights || []).sort(
-    (a: any, b: any) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime()
+    (a: any, b: any) => {
+      const timeDiff = new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime();
+      if (timeDiff !== 0) return timeDiff;
+      return (b.id || 0) - (a.id || 0);
+    }
   );
   let latestInsight = null;
   if (rawInsights.length > 0) {
@@ -285,6 +290,7 @@ export const getPatientDetail = async (patientId: string): Promise<{
       trendDirection: i.trend_direction,
       trendPercent: i.trend_percent,
       insight: i.insight_text,
+      generatedAt: i.generated_at,
       disease: data.disease,
       diseaseSeverity: data.disease_severity,
     };
@@ -445,6 +451,7 @@ export interface DeviceOverview {
   status: 'online' | 'offline';
   last_packet_at: string | null;
   firmware_version: string | null;
+  wifi_rssi?: number | null;
   assigned_patient_id: number | null;
   assigned_patient_name: string | null;
 }

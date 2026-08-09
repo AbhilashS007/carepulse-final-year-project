@@ -16,6 +16,17 @@ export default function TopBar({ title }: { title: string }) {
   const [isFocused, setIsFocused] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    'Notification' in window ? Notification.permission : 'denied'
+  );
+
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+    }
+  };
+
   // Notification States
   const [alertsList, setAlertsList] = useState<Alert[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -38,9 +49,17 @@ export default function TopBar({ title }: { title: string }) {
   const showDesktopNotification = (alert: Alert) => {
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
-        const title = `Critical Alert: ${alert.patientName}`;
+        let title = `CarePulse Alert`;
+        let body = `${alert.type}: ${alert.message}`;
+        if (alert.type === 'High Wetness') {
+          title = `CarePulse — Wetness Detected`;
+          body = `Wetness detected for ${alert.patientName}. Caregiver attention may be required.`;
+        } else {
+          title = `${alert.severity} Alert: ${alert.patientName}`;
+        }
+        
         const options = {
-          body: `${alert.type}: ${alert.message}`,
+          body,
           icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232563eb'><path d='M12 21.593c-5.63-5.539-11-10.297-11-14.402 0-3.791 3.068-5.191 5.281-5.191 1.312 0 4.151.501 5.719 4.457 1.59-3.968 4.464-4.447 5.726-4.447 2.54 0 5.274 1.621 5.274 5.181 0 4.069-5.136 8.625-11 14.402z'/></svg>",
         };
         new Notification(title, options);
@@ -84,12 +103,12 @@ export default function TopBar({ title }: { title: string }) {
       if (newAlertsFound) {
         if (newCriticalFound) {
           playAlertSound();
-          newAlerts.forEach((alert) => {
-            if (alert.severity === 'Critical') {
-              showDesktopNotification(alert);
-            }
-          });
         }
+        newAlerts.forEach((alert) => {
+          if (alert.type === 'High Wetness' || alert.severity === 'Critical') {
+            showDesktopNotification(alert);
+          }
+        });
 
         setAlertsList(prev => {
           const merged = [...newAlerts, ...prev];
@@ -108,9 +127,7 @@ export default function TopBar({ title }: { title: string }) {
   };
 
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
+    // Permission is requested manually by the user via the dropdown button
   }, []);
 
   useEffect(() => {
@@ -324,7 +341,26 @@ export default function TopBar({ title }: { title: string }) {
                   ))
                 )}
               </div>
-              <div className="p-3 border-t border-gray-50">
+              <div className="p-3 border-t border-gray-50 flex flex-col gap-2">
+                {'Notification' in window && (
+                  notificationPermission === 'granted' ? (
+                    <div className="w-full bg-green-50 text-green-700 text-[10px] font-bold py-1.5 rounded-lg border border-green-100 text-center flex items-center justify-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+                      Desktop Notifications Enabled
+                    </div>
+                  ) : notificationPermission === 'denied' ? (
+                    <div className="w-full bg-red-50 text-red-600 text-[10px] font-bold py-1.5 px-2 rounded-lg border border-red-100 text-center leading-tight">
+                      Notifications blocked. Please enable them in your browser settings.
+                    </div>
+                  ) : (
+                    <button
+                      onClick={requestNotificationPermission}
+                      className="w-full bg-blue-50 text-blue-600 text-[10px] font-bold py-1.5 rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors"
+                    >
+                      Enable Desktop Notifications
+                    </button>
+                  )
+                )}
                 <button
                   onClick={() => {
                     setShowNotifications(false);

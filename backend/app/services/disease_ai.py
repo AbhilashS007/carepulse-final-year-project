@@ -413,7 +413,7 @@ def get_disease_profile(disease: Optional[str]) -> Dict[str, Any]:
 
     if "kidney" in disease or "ckd" in disease or "renal" in disease:
         return {
-            "insight": "Renal function patterns indicate potential fluid retention. Urination frequency is irregular.",
+            "insight": "Patients with this renal profile require careful monitoring for fluid retention and urination irregularities.",
             "risk_exp": "CKD patients are at high risk of acute kidney injury if hydration and output are not strictly balanced.",
             "rec": "Monitor fluid intake closely and report any sudden drops in urine output to the nephrologist.",
             "mon": "Measure output volume every 4 hours. Check for edema in lower extremities.",
@@ -422,16 +422,16 @@ def get_disease_profile(disease: Optional[str]) -> Dict[str, Any]:
         }
     elif "diabetes" in disease:
         return {
-            "insight": "Polyuria patterns detected. Wetness saturation is accumulating faster than the baseline.",
+            "insight": "Diabetic profiles may present with increased frequency due to hyperglycemia or ketoacidosis.",
             "risk_exp": "Excessive urination can be an early indicator of hyperglycemia or ketoacidosis in diabetic patients.",
             "rec": "Verify current blood glucose levels and ensure the patient remains adequately hydrated.",
             "mon": "Check blood sugar according to schedule. Monitor for signs of dehydration (dry mouth, confusion).",
-            "tags": "Endocrine,Hyperglycemia,Polyuria",
+            "tags": "Endocrine,Hyperglycemia,Increased Frequency",
             "base_risk": 10,
         }
     elif "uti" in disease or "urinary tract" in disease:
         return {
-            "insight": "High frequency of small-volume urination events detected, consistent with urinary tract irritation.",
+            "insight": "UTI profiles are often characterized by a high frequency of small-volume events due to urinary tract irritation.",
             "risk_exp": "UTI can rapidly progress to systemic infection (sepsis) in elderly patients if untreated.",
             "rec": "Ensure prescribed antibiotics are administered. Encourage fluid intake to flush the urinary tract.",
             "mon": "Monitor for fever, confusion, or hematuria. Check vital signs every 6 hours.",
@@ -440,7 +440,7 @@ def get_disease_profile(disease: Optional[str]) -> Dict[str, Any]:
         }
     elif "stroke" in disease:
         return {
-            "insight": "Incontinence patterns align with neurogenic bladder post-stroke. Output is consistent but unmanaged.",
+            "insight": "Post-stroke patients may exhibit neurogenic bladder patterns with consistent but unmanaged output.",
             "risk_exp": "Prolonged skin exposure to moisture increases the risk of pressure ulcers and dermatitis.",
             "rec": "Establish a scheduled toileting routine to rebuild bladder control and prevent skin breakdown.",
             "mon": "Perform skin integrity checks during every diaper change. Reposition every 2 hours.",
@@ -449,7 +449,7 @@ def get_disease_profile(disease: Optional[str]) -> Dict[str, Any]:
         }
     elif "parkinson" in disease:
         return {
-            "insight": "Urination timing suggests mobility delays reaching the restroom rather than loss of bladder control.",
+            "insight": "Parkinson's patients may experience mobility delays reaching the restroom, impacting continence.",
             "risk_exp": "Urgency combined with mobility issues significantly increases fall risk.",
             "rec": "Provide mobility assistance promptly when the patient indicates need. Keep pathways clear.",
             "mon": "Ensure call bell is within reach. Consider a bedside commode for nighttime use.",
@@ -458,7 +458,7 @@ def get_disease_profile(disease: Optional[str]) -> Dict[str, Any]:
         }
     elif "surgical" in disease or "surgery" in disease:
         return {
-            "insight": "Post-operative fluid output is stabilizing. No signs of urinary retention.",
+            "insight": "Post-operative patients require monitoring for urinary retention or sensory changes from anesthesia.",
             "risk_exp": "Anesthesia and pain medications can cause urinary retention or reduced bladder sensation.",
             "rec": "Continue to monitor output to ensure kidneys are clearing anesthesia and IV fluids effectively.",
             "mon": "Measure exact I/O (Input/Output). Report if output falls below 30ml/hr.",
@@ -467,8 +467,8 @@ def get_disease_profile(disease: Optional[str]) -> Dict[str, Any]:
         }
     else:
         return {
-            "insight": "General incontinence patterns detected. Frequency and volume are within expected baseline ranges.",
-            "risk_exp": "Standard monitoring required to prevent discomfort and maintain hygiene.",
+            "insight": "General monitoring for baseline continence patterns is recommended.",
+            "risk_exp": "Standard monitoring is required to prevent discomfort and maintain hygiene.",
             "rec": "Maintain standard care protocols. Change diaper when saturated.",
             "mon": "Routine checks every 4 hours.",
             "tags": "General,Routine",
@@ -480,43 +480,75 @@ def get_disease_profile(disease: Optional[str]) -> Dict[str, Any]:
 # INSIGHT TEXT ENRICHMENT HELPERS
 # ================================================================
 
-def _enrich_insight_text(base_text: str, telemetry: Dict, alerts: Dict, diagnosis_days: Optional[int]) -> str:
+def _enrich_insight_text(base_text: str, telemetry: Dict, alerts: Dict, trend_dir: str, trend_pct: float) -> str:
     """Enrich the disease-profile insight with real telemetry data."""
-    parts = [base_text]
-
-    if telemetry["event_count_7d"] > 0:
+    parts = []
+    
+    event_count = telemetry.get("event_count_7d", 0)
+    
+    if event_count < 2:
+        parts.append("Insufficient data to establish a conclusive trend.")
+        if event_count > 0:
+            parts.append(f"Only {event_count} reading(s) recorded in the last 7 days.")
+        else:
+            parts.append("No wetness events recorded in the last 7 days.")
+    else:
+        if trend_dir == "up":
+            parts.append(f"Increased wetness event frequency and/or severity detected (up {trend_pct}% vs earlier baseline).")
+        elif trend_dir == "down":
+            parts.append(f"Decreased wetness event frequency and/or severity detected (down {trend_pct}% vs earlier baseline).")
+        else:
+            parts.append("Stable pattern detected, consistent with the patient's recent baseline.")
+            
         parts.append(
-            f"Analysis of {telemetry['event_count_7d']} sensor readings over 7 days shows "
-            f"average wetness of {telemetry['avg_wetness']}% (peak: {telemetry['max_wetness']}%) "
-            f"with {telemetry['avg_daily_frequency']} events/day."
+            f"Over the last 7 days, analysis of {event_count} readings shows an average wetness of "
+            f"{telemetry.get('avg_wetness', 0)}% (peak: {telemetry.get('max_wetness', 0)}%) "
+            f"with approximately {telemetry.get('avg_daily_frequency', 0)} events per day."
         )
 
+    if base_text:
+        parts.append(f"Clinical Context: {base_text}")
+    
     if telemetry.get("latest_battery") is not None and telemetry["latest_battery"] < 30:
         parts.append(f"⚠ Device battery is low at {telemetry['latest_battery']}%.")
 
     return " ".join(parts)
 
 
-def _enrich_risk_explanation(base_text: str, alerts: Dict, risk_breakdown: Dict) -> str:
-    """Enrich risk explanation with alert data and score breakdown."""
-    parts = [base_text]
-
-    if alerts["active_count"] > 0:
+def _enrich_risk_explanation(base_text: str, alerts: Dict, risk_breakdown: Dict, trend_dir: str) -> str:
+    """Enrich risk explanation with alert data, score breakdown, and real telemetry trends."""
+    parts = []
+    
+    score = risk_breakdown.get("score", 0)
+    level = risk_breakdown.get("level", "low")
+    
+    parts.append(f"The patient is assessed at a {level.upper()} risk level (score: {score}/100).")
+    
+    # Determine the primary driver of the risk score
+    tel_score = risk_breakdown.get('_telemetry_score', 0)
+    alt_score = risk_breakdown.get('_alert_score', 0)
+    sev_score = risk_breakdown.get('_severity_score', 0)
+    dis_score = risk_breakdown.get('_disease_base', 0)
+    
+    drivers = [
+        ("telemetry patterns", tel_score),
+        ("active alerts", alt_score),
+        ("disease severity and base risk", sev_score + dis_score)
+    ]
+    highest_driver = max(drivers, key=lambda x: x[1])
+    
+    parts.append(f"This risk level is primarily driven by {highest_driver[0]}.")
+    
+    if trend_dir == "up":
+        parts.append("The recent upward trend in wetness events further elevates this risk.")
+        
+    if alerts.get("active_count", 0) > 0:
         alert_detail = f"{alerts['active_count']} unresolved alert(s)"
-        if alerts["critical_active"] > 0:
+        if alerts.get("critical_active", 0) > 0:
             alert_detail += f" including {alerts['critical_active']} critical"
-        parts.append(f"Currently {alert_detail}.")
+        parts.append(f"Attention is needed for {alert_detail}.")
 
-    if alerts["total_7d"] > 0:
-        parts.append(f"{alerts['total_7d']} alert(s) in the past 7 days.")
-
-    parts.append(
-        f"Risk components: Telemetry={risk_breakdown.get('_telemetry_score', 0)}/40, "
-        f"Alerts={risk_breakdown.get('_alert_score', 0)}/25, "
-        f"Severity={risk_breakdown.get('_severity_score', 0)}/20, "
-        f"Disease={risk_breakdown.get('_disease_base', 0)}/15."
-    )
-
+    parts.append(base_text)
     return " ".join(parts)
 
 
@@ -580,10 +612,10 @@ def generate_insight(db: Session, patient_id: int) -> Optional[AIInsight]:
 
     # ── Enrich text with real data ──
     insight_text = _enrich_insight_text(
-        profile["insight"], telemetry, alert_data, diagnosis_days
+        profile["insight"], telemetry, alert_data, trend_dir, trend_pct
     )
     risk_explanation = _enrich_risk_explanation(
-        profile["risk_exp"], alert_data, risk
+        profile["risk_exp"], alert_data, risk, trend_dir
     )
     recommendation = _enrich_recommendation(
         profile["rec"], diagnosis_days, patient.disease

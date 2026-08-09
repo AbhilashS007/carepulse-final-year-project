@@ -22,7 +22,7 @@ pydantic==2.10.3
 python-dotenv==1.0.1
 
 # HTTP utilities (used by FastAPI)
-httpx==0.28.0
+httpx==0.28.1
 
 # JWT Authentication dependencies
 python-jose[cryptography]==3.3.0

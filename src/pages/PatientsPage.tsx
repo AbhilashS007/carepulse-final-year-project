@@ -537,6 +537,10 @@ function PatientDetailPanel({
                       {detail.latestInsight.recommendation}
                     </p>
                   </div>
+                  {/* Generated timestamp */}
+                  <p className="text-[10px] text-gray-400 mt-2 text-right">
+                    Generated: {new Date(detail.latestInsight.generatedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
                 </div>
               )}
             </div>
